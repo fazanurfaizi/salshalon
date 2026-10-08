@@ -11,9 +11,9 @@ namespace salshalon::features::settings {
 
 namespace {
 constexpr float kButtonWidth = 520.0f;
-constexpr float kButtonHeight = 112.0f;
+constexpr float kButtonHeight = 100.0f;
 constexpr float kButtonGap = 40.0f;
-constexpr float kFirstButtonY = 800.0f;
+constexpr float kFirstButtonY = 220.0f;
 } // namespace
 
 void SettingsState::onEnter(core::Engine &engine) {
@@ -72,7 +72,7 @@ void SettingsState::render(graphics::SpriteBatch &batch) {
       graphics::Color{0.10f, 0.11f, 0.15f, 1.0f});
 
   this->renderer_.drawTextCentered(
-      "SETTINGS", {core::kDesignWidth * 0.5f, 240.0f}, 6.0f, graphics::kWhite);
+      "SETTINGS", {core::kDesignWidth * 0.5f, 120.0f}, 6.0f, graphics::kWhite);
 
   // Buttons
   for (auto &button : this->buttons_) {

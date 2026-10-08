@@ -31,8 +31,8 @@ public:
 private:
   void rebuild();
 
-  float designWidth_ = 720.0f;
-  float designHeight_ = 1280.0f;
+  float designWidth_ = 1280.0f;
+  float designHeight_ = 720.0f;
   int surfaceWidth_ = 0;
   int surfaceHeight_ = 0;
 

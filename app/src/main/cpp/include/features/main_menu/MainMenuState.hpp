@@ -25,7 +25,6 @@ public:
 
 private:
   void buildUi();
-  void showToast(std::string message, float seconds);
 
   void onPlayPressed();
   void onSettingsPressed();
@@ -35,11 +34,7 @@ private:
   ui::Renderer renderer_{};
   std::vector<std::unique_ptr<ui::Button>> buttons_{};
 
-  bool settingsOpen_ = false;
   float elapsed_ = 0.0f;
-
-  std::string toast_{};
-  float toastTimer_ = 0.0f;
 };
 
 } // namespace salshalon::features::main_menu

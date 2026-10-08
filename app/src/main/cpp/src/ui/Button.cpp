@@ -2,7 +2,6 @@
 
 #include <utility>
 
-#include "core/Log.hpp"
 #include "input/TouchEvent.hpp"
 #include "math/Math.hpp"
 #include "ui/Renderer.hpp"

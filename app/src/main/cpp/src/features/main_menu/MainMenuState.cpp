@@ -17,12 +17,12 @@ namespace salshalon::features::main_menu {
 
 namespace {
 constexpr float kButtonWidth = 520.0f;
-constexpr float kButtonHeight = 112.0f;
+constexpr float kButtonHeight = 100.0f;
 constexpr float kButtonGap = 40.0f;
-constexpr float kFirstButtonY = 800.0f;
+constexpr float kFirstButtonY = 240.0f;
 
 constexpr float kTitleScale = 8.0f;
-constexpr float kSubtitleScale = 3.0f;
+constexpr float kSubtitleScale = 4.0f;
 } // namespace
 
 void MainMenuState::onEnter(core::Engine &engine) {
@@ -67,10 +67,6 @@ void MainMenuState::update(float deltaSeconds) {
   for (auto &button : this->buttons_) {
     button->update(deltaSeconds);
   }
-
-  if (this->toastTimer_ > 0.0f) {
-    this->toastTimer_ -= deltaSeconds;
-  }
 }
 
 void MainMenuState::render(graphics::SpriteBatch &batch) {
@@ -100,11 +96,11 @@ void MainMenuState::render(graphics::SpriteBatch &batch) {
                math::Rect::fromCenter({titleCenterX, 340.0f + bob}, logoWidth,
                                       logoHeight));
   } else {
-    this->renderer_.drawTextCentered("SALSHALON", {titleCenterX, 330.0f + bob},
+    this->renderer_.drawTextCentered("SALSHALON", {titleCenterX, 90.0f + bob},
                                      kTitleScale,
                                      graphics::Color{1.0f, 0.94f, 0.82f, 1.0f});
     this->renderer_.drawTextCentered(
-        "salon rush", {titleCenterX, 430.0f + bob}, kSubtitleScale,
+        "salon rush", {titleCenterX, 180.0f + bob}, kSubtitleScale,
         graphics::Color{0.85f, 0.72f, 0.95f, 1.0f});
   }
 
@@ -112,60 +108,16 @@ void MainMenuState::render(graphics::SpriteBatch &batch) {
   for (auto &button : this->buttons_) {
     button->render(this->renderer_);
   }
-
-  // Settings Overlay
-  if (this->settingsOpen_) {
-    this->renderer_.drawRect(
-        {0.0f, 0.0f, core::kDesignWidth, core::kDesignHeight},
-        graphics::Color{0.0f, 0.0f, 0.0f, 0.66f});
-
-    const math::Rect panel = math::Rect::fromCenter(
-        {core::kDesignWidth * 0.5f, core::kDesignHeight * 0.5f}, 580.0f,
-        420.0f);
-
-    this->renderer_.drawRect(panel, graphics::Color{0.14f, 0.16f, 0.23f, 1.0f});
-    this->renderer_.drawFrame(panel, graphics::Color{1.0f, 1.0f, 1.0f, 0.3f},
-                              3.0f);
-
-    this->renderer_.drawTextCentered("SETTINGS",
-                                     {panel.center().x, panel.y + 80.0f}, 4.5f,
-                                     graphics::kWhite);
-    this->renderer_.drawTextCentered(
-        "coming soon", {panel.center().x, panel.center().y}, 3.0f,
-        graphics::Color{0.80f, 0.86f, 0.94f, 1.0f});
-    this->renderer_.drawTextCentered(
-        "tap anywhere to close", {panel.center().x, panel.bottom() - 70.0f},
-        2.2f, graphics::Color{0.58f, 0.63f, 0.72f, 1.0f});
-  }
-
-  // Toast
-  if (this->toastTimer_ > 0.0f && !this->toast_.empty()) {
-    const float alpha = math::clampf(this->toastTimer_, 0.0f, 1.0f);
-    this->renderer_.drawTextCentered(
-        this->toast_, {core::kDesignWidth * 0.5f, core::kDesignHeight - 70.0f},
-        3.0f, graphics::Color{1.0f, 0.90f, 0.55f, alpha});
-  }
 }
 
 void MainMenuState::onTouch(const input::TouchEvent &event) {
-  // While the settings overlay is up it swallows every touch.
-  if (this->settingsOpen_) {
-    if (event.phase == input::TouchPhase::Up ||
-        event.phase == input::TouchPhase::Down) {
-      this->settingsOpen_ = false;
-    }
-    return;
-  }
-
+  SAL_LOGI("MainMenu::onTouch phase=%d pos=(%.0f,%.0f) buttons=%zu",
+           static_cast<int>(event.phase), event.position.x, event.position.y,
+           this->buttons_.size());
   for (auto &button : this->buttons_) {
     if (button->onTouch(event))
       break; // consumed
   }
-}
-
-void MainMenuState::showToast(std::string message, float seconds) {
-  this->toast_ = std::move(message);
-  this->toastTimer_ = seconds;
 }
 
 void MainMenuState::onPlayPressed() {

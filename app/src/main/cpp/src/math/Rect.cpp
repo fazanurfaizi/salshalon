@@ -3,7 +3,11 @@
 namespace salshalon::math {
 
 bool Rect::contains(const Vec2 &p) const {
-  return p.x >= this->x && p.x <= this->x + this->width && p.y >= this->x &&
+  const bool hitX = p.x >= x && p.x <= x + width;
+  const bool hitY = p.y >= y && p.y <= y + height;
+  const bool hit = hitX && hitY;
+
+  return p.x >= this->x && p.x <= this->x + this->width && p.y >= this->y &&
          p.y <= this->y + height;
 }
 
