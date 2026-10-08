@@ -2,6 +2,7 @@
 
 #include "game/GameState.hpp"
 #include "ui/Button.hpp"
+#include "ui/Dialog.hpp"
 #include "ui/Renderer.hpp"
 #include "ui/Toast.hpp"
 
@@ -18,11 +19,15 @@ public:
 
 private:
   void buildUi();
+  void openSettingsDialog();
+
+  void onDialogPressed();
   void onShowPressed();
 
   ui::Renderer renderer_{};
 
   ui::Toast toast_{};
+  ui::Dialog settingsDialog_{};
   std::vector<std::unique_ptr<ui::Button>> buttons_{};
 };
 

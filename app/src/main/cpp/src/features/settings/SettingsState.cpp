@@ -20,6 +20,11 @@ void SettingsState::onEnter(core::Engine &engine) {
   GameState::onEnter(engine);
   buildUi();
 
+  // Configure dialog
+  this->settingsDialog_.setTitle("SETTINGS");
+  this->settingsDialog_.setBody("coming soon");
+  this->settingsDialog_.setHint("tap anywhere to close");
+
   // Configure toast
   this->toast_.setKind(ui::ToastKind::Info).setFadeTime(1.5f);
 }
@@ -43,6 +48,9 @@ void SettingsState::buildUi() {
     this->buttons_.push_back(std::move(button));
   };
 
+  addButton("DIALOG", layout.nextCentered(core::kDesignWidth),
+            [this] { onDialogPressed(); });
+
   addButton("SHOW", layout.nextCentered(core::kDesignWidth),
             [this] { onShowPressed(); });
 }
@@ -52,7 +60,8 @@ void SettingsState::update(float deltaSeconds) {
     button->update(deltaSeconds);
   }
 
-  toast_.update(deltaSeconds);
+  this->settingsDialog_.update(deltaSeconds);
+  this->toast_.update(deltaSeconds);
 }
 
 void SettingsState::render(graphics::SpriteBatch &batch) {
@@ -75,12 +84,18 @@ void SettingsState::render(graphics::SpriteBatch &batch) {
       {core::kDesignWidth * 0.5f, core::kDesignHeight - 120.0f}, 2.5f,
       graphics::Color{0.7f, 0.7f, 0.7f, 1.0f});
 
+  this->settingsDialog_.render(
+      this->renderer_, {0.0f, 0.0f, core::kDesignWidth, core::kDesignHeight});
+
   this->toast_.render(this->renderer_,
                       {core::kDesignWidth * 0.5f, core::kDesignHeight - 70.0f},
                       ui::ToastAnchor::Center);
 }
 
 void SettingsState::onTouch(const input::TouchEvent &event) {
+  if (this->settingsDialog_.onTouch(event))
+    return;
+
   for (auto &button : this->buttons_) {
     if (button->onTouch(event))
       break; // consumed
@@ -90,12 +105,23 @@ void SettingsState::onTouch(const input::TouchEvent &event) {
   // }
 }
 
+void SettingsState::openSettingsDialog() {
+  settingsDialog_.setTitle("SETTINGS");
+  settingsDialog_.setBody("coming soon");
+  settingsDialog_.setHint("tap anywhere to close");
+  settingsDialog_.show();
+}
+
+void SettingsState::onDialogPressed() {
+  SAL_LOGI("SettingsState: DIALOG pressed");
+  this->openSettingsDialog();
+}
+
 void SettingsState::onShowPressed() {
   SAL_LOGI("SettingsState: SHOW pressed");
   this->toast_.setKind(ui::ToastKind::Warning)
       .setTitle("Warning!")
       .show("show toast");
-  // this->settingsOpen_ = true;
   // goTo<settings::SettingsState>(*this->engine_);
 }
 

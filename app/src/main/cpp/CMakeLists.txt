@@ -48,6 +48,7 @@ add_library(salshalon SHARED
     src/ui/Renderer.cpp
     src/ui/Button.cpp
     src/ui/Toast.cpp
+    src/ui/Dialog.cpp
 
     # Features
     src/features/main_menu/MainMenuState.cpp
