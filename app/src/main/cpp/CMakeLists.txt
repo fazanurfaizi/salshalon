@@ -45,8 +45,9 @@ add_library(salshalon SHARED
 
     src/math/Rect.cpp
 
-    src/ui/Button.cpp
     src/ui/Renderer.cpp
+    src/ui/Button.cpp
+    src/ui/Toast.cpp
 
     # Features
     src/features/main_menu/MainMenuState.cpp
@@ -54,6 +55,8 @@ add_library(salshalon SHARED
 
     src/features/salon/SalonState.cpp
     src/features/salon/SalonAssets.cpp
+
+    src/features/settings/SettingsState.cpp
 )
 
 target_include_directories(salshalon PRIVATE

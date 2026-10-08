@@ -8,6 +8,7 @@
 #include "core/Log.hpp"
 #include "features/Feature.hpp"
 #include "features/salon/SalonState.hpp"
+#include "features/settings/SettingsState.hpp"
 #include "graphics/SpriteBatch.hpp"
 #include "input/TouchEvent.hpp"
 #include "ui/Layout.hpp"
@@ -169,13 +170,13 @@ void MainMenuState::showToast(std::string message, float seconds) {
 
 void MainMenuState::onPlayPressed() {
   SAL_LOGI("MainMenuState: PLAY pressed");
-  showToast("\"SalonState\" is the next stop", 2.5f);
   goTo<salon::SalonState>(*this->engine_);
 }
 
 void MainMenuState::onSettingsPressed() {
   SAL_LOGI("MainMenuState: SETTINGS pressed");
-  this->settingsOpen_ = true;
+  // this->settingsOpen_ = true;
+  goTo<settings::SettingsState>(*this->engine_);
 }
 
 void MainMenuState::onQuitPressed() {

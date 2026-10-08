@@ -12,7 +12,7 @@
 namespace salshalon::features::main_menu {
 
 /// The entry screen
-class MainMenuState : public game::GameState {
+class MainMenuState final : public game::GameState {
 public:
   MainMenuState() = default;
 
