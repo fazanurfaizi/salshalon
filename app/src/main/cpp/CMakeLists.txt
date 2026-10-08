@@ -54,7 +54,8 @@ add_library(salshalon SHARED
     src/features/main_menu/MainMenuState.cpp
     src/features/main_menu/MainMenuAssets.cpp
 
-    src/features/salon/SalonState.cpp
+    src/features/salon/SalonPlayState.cpp
+    src/features/salon/SalonContext.cpp
     src/features/salon/SalonAssets.cpp
 
     src/features/settings/SettingsState.cpp

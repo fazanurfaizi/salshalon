@@ -7,7 +7,7 @@
 #include "core/GameConfig.hpp"
 #include "core/Log.hpp"
 #include "features/Feature.hpp"
-#include "features/salon/SalonState.hpp"
+#include "features/salon/SalonPlayState.hpp"
 #include "features/settings/SettingsState.hpp"
 #include "graphics/SpriteBatch.hpp"
 #include "input/TouchEvent.hpp"
@@ -122,7 +122,7 @@ void MainMenuState::onTouch(const input::TouchEvent &event) {
 
 void MainMenuState::onPlayPressed() {
   SAL_LOGI("MainMenuState: PLAY pressed");
-  goTo<salon::SalonState>(*this->engine_);
+  goTo<salon::SalonPlayState>(*this->engine_);
 }
 
 void MainMenuState::onSettingsPressed() {
