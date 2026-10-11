@@ -7,12 +7,13 @@ namespace salshalon::features::salon {
 enum class CellType : uint32_t {
   Empty,
   Door,
-  WaitingSeat,
+  WaitSlot,
+  Chair,
 };
 
 struct Cell {
   CellType type{CellType::Empty};
-  bool occupied{false};
+  uint32_t occupantId = 0;
 };
 
 } // namespace salshalon::features::salon

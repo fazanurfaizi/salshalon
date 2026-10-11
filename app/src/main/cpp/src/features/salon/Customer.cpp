@@ -1,7 +1,9 @@
 #include "features/salon/Customer.hpp"
-#include "core/Log.hpp"
-#include "glm/geometric.hpp"
+
 #include <algorithm>
+#include <glm/geometric.hpp>
+
+#include "core/Log.hpp"
 
 namespace salshalon::features::salon {
 
@@ -20,8 +22,6 @@ void Customer::update(float deltaSeconds) {
     break;
   case CustomerState::Seated:
     break;
-  default:
-    SAL_LOGI("Customer: customer %d has been updated", this->id_);
   }
 }
 
@@ -52,6 +52,10 @@ void Customer::setCurrentState(CustomerState state) {
   currentState_ = state;
 
   this->stateTimer_.reset(state);
+}
+
+void Customer::setReserveCellIndex(int index) {
+  this->reservedCellIndex_ = index;
 }
 
 void Customer::moveTowardsTarget(float deltaSeconds) {

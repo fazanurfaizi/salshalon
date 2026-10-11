@@ -1,6 +1,6 @@
 #include "features/salon/SalonPlayState.hpp"
 
-#include <algorithm>
+#include <glm/geometric.hpp>
 #include <memory>
 #include <string>
 
@@ -22,10 +22,6 @@ namespace salshalon::features::salon {
 using core::kDesignHeight;
 using core::kDesignWidth;
 
-namespace {
-constexpr float kCustomerHitRadius = 48.0f;
-}
-
 void SalonPlayState::onEnter(core::Engine &engine) {
   game::GameState::onEnter(engine);
   this->assets_.load(engine.assets());
@@ -37,6 +33,9 @@ void SalonPlayState::onEnter(core::Engine &engine) {
       [this] { this->spawnCustomer(); });
   this->spawnButton_->setTextScale(4.0f);
 
+  this->toast_ = std::make_unique<ui::Toast>();
+  this->toast_->setKind(ui::ToastKind::Info).setFadeTime(1.5f);
+
   SAL_LOGI("Salon: enter");
 }
 
@@ -44,12 +43,13 @@ void SalonPlayState::onExit() {
   this->assets_.unload();
   this->customers_.clear();
   this->spawnButton_.reset();
+  this->toast_.reset();
   SAL_LOGI("Salon: exit");
 }
 
 void SalonPlayState::update(float deltaSeconds) {
-  this->elapsed_ += deltaSeconds;
   this->spawnButton_->update(deltaSeconds);
+  this->toast_->update(deltaSeconds);
 
   for (auto &customer : this->customers_) {
     customer.update(deltaSeconds);
@@ -60,33 +60,6 @@ void SalonPlayState::update(float deltaSeconds) {
   }
 
   this->removeGoneCustomers();
-}
-
-void SalonPlayState::applyCustomerTransition(Customer &customer) {
-  switch (customer.currentState()) {
-  case CustomerState::Arriving:
-    if (customer.hasArrived()) {
-      customer.setCurrentState(CustomerState::Queueing);
-    }
-    break;
-
-  case CustomerState::WalkingToSeat:
-    if (customer.hasArrived()) {
-      customer.setCurrentState(CustomerState::Seated);
-    }
-    break;
-
-  case CustomerState::Seated:
-    if (customer.hasSatLongEnough()) {
-      customer.setTargetPosition(cellCenter(kDoorCol, kDoorRow));
-      customer.setCurrentState(CustomerState::Leaving);
-    }
-    break;
-
-  case CustomerState::Queueing:
-  case CustomerState::Leaving:
-    break;
-  }
 }
 
 void SalonPlayState::render(graphics::SpriteBatch &batch) {
@@ -104,6 +77,10 @@ void SalonPlayState::render(graphics::SpriteBatch &batch) {
   this->renderHud();
 
   this->spawnButton_->render(this->renderer_);
+
+  this->toast_->render(this->renderer_,
+                       {core::kDesignWidth * 0.5f, core::kDesignHeight - 70.0f},
+                       ui::ToastAnchor::Center);
 }
 
 void SalonPlayState::renderGrid() {
@@ -129,8 +106,14 @@ void SalonPlayState::renderGrid() {
 
       const bool alternate = ((col + row) & 1) != 0;
       const Cell &cell = getCell(col, row);
-      const graphics::Color color = cellColor(cell.type, alternate);
-      this->renderer_.drawRect(cellRect.inset(1.0f), color);
+      this->renderer_.drawRect(cellRect.inset(1.0f),
+                               cellColor(cell.type, alternate));
+
+      if (cell.occupantId != 0) {
+        // @NOTE: fade marker on reserved cells. Remove when customer sprites
+        this->renderer_.drawRect(cellRect.inset(kTileSize * 0.35f),
+                                 graphics::Color{1.0f, 1.0f, 1.0f, 0.15f});
+      }
     }
   }
 }
@@ -156,14 +139,14 @@ void SalonPlayState::renderCustomer() {
     }
 
     const math::Rect rect = math::Rect::fromCenter(
-        customer.currentPosition(), this->customerSize_, this->customerSize_);
+        customer.currentPosition(), kCustomerSize, kCustomerSize);
     this->renderer_.drawRect(rect, bodyColor);
 
     // Small head so orientation is readable
     const math::Rect head = math::Rect::fromCenter(
         {customer.currentPosition().x,
-         customer.currentPosition().y - this->customerSize_ * 0.35f},
-        this->customerSize_ * 0.55f, this->customerSize_ * 0.55f);
+         customer.currentPosition().y - kCustomerSize * 0.35f},
+        kCustomerSize * 0.55f, kCustomerSize * 0.55f);
     this->renderer_.drawRect(head, graphics::Color{1.0f, 0.82f, 0.66f, 1.0f});
   }
 }
@@ -243,15 +226,35 @@ const Cell &SalonPlayState::getCell(int col, int row) const {
 
 void SalonPlayState::initGrid() {
   // Set door at entrance
-  getCell(kDoorCol, kDoorRow).type = CellType::Door;
+  getCell(kDoorCell.col, kDoorCell.row).type = CellType::Door;
 
-  // Set Waiting Seats
-  getCell(kSeatCol, kSeatRow).type = CellType::WaitingSeat;
+  for (const CellCoord &coord : kWaitSlots) {
+    getCell(coord.col, coord.row).type = CellType::WaitSlot;
+  }
+  for (const CellCoord &coord : kChairSlots) {
+    getCell(coord.col, coord.row).type = CellType::Chair;
+  }
+}
+
+Cell &SalonPlayState::cellByIndex(int index) { return this->grid_[index]; }
+
+const Cell &SalonPlayState::cellByIndex(int index) const {
+  return this->grid_[index];
+}
+
+int SalonPlayState::cellIndex(const CellCoord &coord) {
+  return coord.row * kGridCols + coord.col;
 }
 
 math::Vec2 SalonPlayState::cellCenter(int col, int row) const {
   return {kGridOriginX + (col + 0.5f) * kTileSize,
           kGridOriginY + (row + 0.5f) * kTileSize};
+}
+
+math::Vec2 SalonPlayState::cellCenterByIndex(int index) const {
+  const int col = index % kGridCols;
+  const int row = index / kGridCols;
+  return cellCenter(col, row);
 }
 
 bool SalonPlayState::cellFromWorld(const math::Vec2 &p, int &outCol,
@@ -276,8 +279,10 @@ graphics::Color SalonPlayState::cellColor(CellType type, bool alternate) const {
   switch (type) {
   case CellType::Door:
     return graphics::Color{0.45f, 0.25f, 0.15f, 1.0f};
-  case CellType::WaitingSeat:
+  case CellType::WaitSlot:
     return graphics::Color{0.20f, 0.40f, 0.55f, 1.0f};
+  case CellType::Chair:
+    return graphics::Color{0.40f, 0.28f, 0.42f, 1.0f};
   case CellType::Empty:
   default:
     return alternate ? graphics::Color{0.21f, 0.17f, 0.24f, 1.0f}
@@ -285,38 +290,129 @@ graphics::Color SalonPlayState::cellColor(CellType type, bool alternate) const {
   }
 }
 
+// Customer helpers
+void SalonPlayState::applyCustomerTransition(Customer &customer) {
+  switch (customer.currentState()) {
+  case CustomerState::Arriving:
+    if (customer.hasArrived()) {
+      customer.setCurrentState(CustomerState::Queueing);
+    }
+    break;
+
+  case CustomerState::WalkingToSeat:
+    if (customer.hasArrived()) {
+      customer.setCurrentState(CustomerState::Seated);
+    }
+    break;
+
+  case CustomerState::Seated:
+    if (customer.hasSatLongEnough()) {
+      this->freeCustomerCell(customer);
+      customer.setTargetPosition(cellCenter(kDoorCell.col, kDoorCell.row));
+      customer.setCurrentState(CustomerState::Leaving);
+    }
+    break;
+
+  case CustomerState::Queueing:
+  case CustomerState::Leaving:
+    break;
+  }
+}
+
 void SalonPlayState::spawnCustomer() {
+  const int waitSlotIndex = this->findFreeWaitSlot();
+  if (waitSlotIndex < 0) {
+    SAL_LOGW("Salon: no free wait slot, spawn rejected");
+    this->toast_->setKind(ui::ToastKind::Warning)
+        .setTitle("Warning!")
+        .show("No free wait slot");
+    return;
+  }
+
   ++this->nextCustomerId_;
 
-  const math::Vec2 spawnPos = cellCenter(kDoorCol, kDoorRow);
-  const math::Vec2 targetPos = cellCenter(kWaitCol, kWaitRow);
+  const math::Vec2 spawnPos = cellCenter(kDoorCell.col, kDoorCell.row);
+  const math::Vec2 waitPos = cellCenterByIndex(waitSlotIndex);
 
   Customer customer(this->nextCustomerId_, CustomerState::Arriving, spawnPos);
-  customer.setTargetPosition(targetPos);
+  customer.setTargetPosition(waitPos);
+  customer.setReserveCellIndex(waitSlotIndex);
 
+  this->reserveCell(waitSlotIndex, customer.id());
   this->customers_.push_back(customer);
 
   SAL_LOGI("Salon: spawning customer %u", this->nextCustomerId_);
 }
 
-void SalonPlayState::seatCustomer(Customer &customer) {
-  customer.setTargetPosition(cellCenter(kSeatCol, kSeatRow));
+bool SalonPlayState::seatCustomer(Customer &customer) {
+  const int chairIndex = this->findFreeChair();
+  if (chairIndex < 0) {
+    SAL_LOGW("Salon: no free chair for customer: %u", customer.id());
+    this->toast_->setKind(ui::ToastKind::Warning)
+        .setTitle("Warning!")
+        .show("No free chair");
+    return false;
+  }
+
+  this->freeCustomerCell(customer);
+  this->reserveCell(chairIndex, customer.id());
+
+  customer.setReserveCellIndex(chairIndex);
+  customer.setTargetPosition(cellCenterByIndex(chairIndex));
   customer.setCurrentState(CustomerState::WalkingToSeat);
+
+  SAL_LOGI("Salon: customer %u -> chair %d", customer.id(), chairIndex);
+  return true;
 }
 
 void SalonPlayState::removeGoneCustomers() {
-  // clang-format off
-  this->customers_.erase(
-    std::remove_if(
-      this->customers_.begin(),
-      this->customers_.end(),
-      [](const Customer &customer) {
-        return customer.currentState() == 
-          CustomerState::Leaving && customer.hasArrived();
-    }),
-    this->customers_.end()
-  );
-  // clang-format on
+  auto it = this->customers_.begin();
+  while (it != this->customers_.end()) {
+    if (it->currentState() == CustomerState::Leaving && it->hasArrived()) {
+      this->freeCustomerCell(*it);
+      it = this->customers_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+// Reservation helpers
+int SalonPlayState::findFreeWaitSlot() const {
+  for (const CellCoord &coord : kWaitSlots) {
+    if (getCell(coord.col, coord.row).occupantId == 0) {
+      return cellIndex(coord);
+    }
+  }
+  return -1;
+}
+
+int SalonPlayState::findFreeChair() const {
+  for (const CellCoord &coord : kChairSlots) {
+    if (getCell(coord.col, coord.row).occupantId == 0) {
+      return cellIndex(coord);
+    }
+  }
+  return -1;
+}
+
+void SalonPlayState::reserveCell(int index, uint32_t customerId) {
+  if (index < 0)
+    return;
+  this->cellByIndex(index).occupantId = customerId;
+}
+
+void SalonPlayState::freeCell(int index) {
+  if (index < 0)
+    return;
+  cellByIndex(index).occupantId = 0;
+}
+
+void SalonPlayState::freeCustomerCell(Customer &customer) {
+  if (customer.reservedCellIndex() < 0)
+    return;
+  this->freeCell(customer.reservedCellIndex());
+  customer.setReserveCellIndex(-1);
 }
 
 } // namespace salshalon::features::salon
