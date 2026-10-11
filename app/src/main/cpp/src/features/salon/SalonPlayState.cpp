@@ -148,6 +148,28 @@ void SalonPlayState::renderCustomer() {
          customer.currentPosition().y - kCustomerSize * 0.35f},
         kCustomerSize * 0.55f, kCustomerSize * 0.55f);
     this->renderer_.drawRect(head, graphics::Color{1.0f, 0.82f, 0.66f, 1.0f});
+
+    if (customer.currentState() == CustomerState::Queueing) {
+      const float fration =
+          math::clampf(customer.queueElapsedFraction(), 0.0f, 1.0f);
+      const float barWidth = kCustomerSize;
+      const float barHeight = 8.0f;
+      const math::Vec2 pos = customer.currentPosition();
+
+      this->renderer_.drawRect({pos.x - barWidth * 0.5f,
+                                pos.y - kCustomerSize * 0.9f, barWidth,
+                                barWidth},
+                               graphics::Color{0.2f, 0.2f, 0.2f, 0.9f});
+
+      const float remaining = 1.0f - fration;
+      const graphics::Color fill =
+          graphics::lerp(graphics::Color{0.9f, 0.2f, 0.2f, 1.0f},
+                         graphics::Color{0.9f, 0.9f, 0.3f, 1.0f}, remaining);
+      this->renderer_.drawRect({pos.x - barWidth * 0.5f,
+                                pos.y - kCustomerSize * 0.5f,
+                                barWidth * remaining, barHeight},
+                               fill);
+    }
   }
 }
 
@@ -159,6 +181,16 @@ void SalonPlayState::renderHud() {
   this->renderer_.drawText("DAY " + std::to_string(this->context_.day()),
                            {24.0f, kHudTopHeight * 0.5f - 12.0f}, 2.5f,
                            graphics::kWhite);
+
+  // Reputation — center-aligned
+  const std::string reputationStr =
+      "REP:" + std::to_string(this->context_.reputation());
+  const float reputationWidth =
+      this->renderer_.measureText(reputationStr, 2.5f);
+  this->renderer_.drawText(
+      reputationStr,
+      {kDesignWidth * 0.5 - reputationWidth, kHudTopHeight * 0.5f - 12.0f},
+      2.5f, graphics::Color{0.85f, 1.0f, 0.75f, 1.0f});
 
   // Money — right-aligned
   const std::string moneyStr = "$" + std::to_string(this->context_.money());
@@ -299,6 +331,15 @@ void SalonPlayState::applyCustomerTransition(Customer &customer) {
     }
     break;
 
+  case CustomerState::Queueing:
+    if (customer.hasGivenUp()) {
+      this->freeCustomerCell(customer);
+      customer.setTargetPosition(cellCenter(kDoorCell.col, kDoorCell.row));
+      customer.setCurrentState(CustomerState::Leaving);
+      customer.setOutcome(CustomerOutcome::GaveUp);
+    }
+    break;
+
   case CustomerState::WalkingToSeat:
     if (customer.hasArrived()) {
       customer.setCurrentState(CustomerState::Seated);
@@ -306,6 +347,7 @@ void SalonPlayState::applyCustomerTransition(Customer &customer) {
     break;
 
   case CustomerState::Seated:
+    customer.setOutcome(CustomerOutcome::Served);
     if (customer.hasSatLongEnough()) {
       this->freeCustomerCell(customer);
       customer.setTargetPosition(cellCenter(kDoorCell.col, kDoorCell.row));
@@ -313,7 +355,6 @@ void SalonPlayState::applyCustomerTransition(Customer &customer) {
     }
     break;
 
-  case CustomerState::Queueing:
   case CustomerState::Leaving:
     break;
   }
@@ -370,6 +411,14 @@ void SalonPlayState::removeGoneCustomers() {
   while (it != this->customers_.end()) {
     if (it->currentState() == CustomerState::Leaving && it->hasArrived()) {
       this->freeCustomerCell(*it);
+      switch (it->outcome()) {
+      case CustomerOutcome::Served:
+        this->context_.onCustomerServed(50);
+        break;
+      case CustomerOutcome::GaveUp:
+        this->context_.onCustomerLost();
+        break;
+      }
       it = this->customers_.erase(it);
     } else {
       ++it;

@@ -12,6 +12,11 @@ enum class CustomerState : std::size_t {
   Leaving,
 };
 
+enum class CustomerOutcome : std::size_t {
+  Served,
+  GaveUp,
+};
+
 struct StateTimer {
 public:
   [[nodiscard]] float get(CustomerState state) const;

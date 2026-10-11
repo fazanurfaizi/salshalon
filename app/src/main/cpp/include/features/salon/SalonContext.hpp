@@ -10,19 +10,19 @@ public:
   SalonContext() = default;
 
   int32_t money() const { return this->money_; }
-
   int32_t reputation() const { return this->reputation_; }
-
   int32_t day() const { return this->day_; }
 
   bool earn(int32_t amount);
-
   bool trySpend(int32_t amount);
 
   /// Applies a reputation delta, clamped to [0, 100].
   void adjustReputation(int32_t delta);
 
   void advanceDay();
+
+  void onCustomerServed(int32_t payout);
+  void onCustomerLost();
 
 private:
   static constexpr int32_t kDailyReputationDecay = 1;

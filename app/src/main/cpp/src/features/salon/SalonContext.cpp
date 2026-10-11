@@ -43,8 +43,15 @@ void SalonContext::adjustReputation(int32_t delta) {
 void SalonContext::advanceDay() {
   ++this->day_;
   this->adjustReputation(-kDailyReputationDecay);
-  SAL_LOGI("SalonContext: day %u begins (money=%d, rep=%d)", this->day_,
+  SAL_LOGI("SalonContext: day %d begins (money=%d, rep=%d)", this->day_,
            this->money_, this->reputation_);
 }
+
+void SalonContext::onCustomerServed(int32_t payout) {
+  this->earn(payout);
+  this->adjustReputation(1);
+}
+
+void SalonContext::onCustomerLost() { this->adjustReputation(-5); }
 
 } // namespace salshalon::features::salon

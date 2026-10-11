@@ -34,6 +34,10 @@ bool Customer::hasSatLongEnough() const {
   return this->stateTimer_.get(CustomerState::Seated) >= kSeatedDuration;
 }
 
+bool Customer::hasGivenUp() const {
+  return this->stateTimer_.get(CustomerState::Queueing) >= kPatienceSeconds;
+}
+
 void Customer::setCurrentPosition(const math::Vec2 &position) {
   currentPosition_ = position;
 }
@@ -41,6 +45,8 @@ void Customer::setCurrentPosition(const math::Vec2 &position) {
 void Customer::setTargetPosition(const math::Vec2 &position) {
   targetPosition_ = position;
 }
+
+void Customer::setOutcome(CustomerOutcome outcome) { this->outcome_ = outcome; }
 
 void Customer::setCurrentState(CustomerState state) {
   if (state == currentState_)
