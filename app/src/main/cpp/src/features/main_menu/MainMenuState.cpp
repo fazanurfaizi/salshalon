@@ -111,9 +111,6 @@ void MainMenuState::render(graphics::SpriteBatch &batch) {
 }
 
 void MainMenuState::onTouch(const input::TouchEvent &event) {
-  SAL_LOGI("MainMenu::onTouch phase=%d pos=(%.0f,%.0f) buttons=%zu",
-           static_cast<int>(event.phase), event.position.x, event.position.y,
-           this->buttons_.size());
   for (auto &button : this->buttons_) {
     if (button->onTouch(event))
       break; // consumed

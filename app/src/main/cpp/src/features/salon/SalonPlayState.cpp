@@ -1,6 +1,7 @@
 #include "features/salon/SalonPlayState.hpp"
 
-#include <cmath>
+#include <algorithm>
+#include <memory>
 #include <string>
 
 #include "core/Engine.hpp"
@@ -8,31 +9,84 @@
 #include "core/Log.hpp"
 #include "features/Feature.hpp"
 #include "features/main_menu/MainMenuState.hpp"
+#include "features/salon/Customer.hpp"
 #include "graphics/Color.hpp"
 #include "graphics/SpriteBatch.hpp"
 #include "input/TouchEvent.hpp"
 #include "math/Math.hpp"
+#include "math/Rect.hpp"
+#include "ui/Button.hpp"
 
 namespace salshalon::features::salon {
 
 using core::kDesignHeight;
 using core::kDesignWidth;
 
+namespace {
+constexpr float kCustomerHitRadius = 48.0f;
+}
+
 void SalonPlayState::onEnter(core::Engine &engine) {
   game::GameState::onEnter(engine);
   this->assets_.load(engine.assets());
+  this->initGrid();
+
+  // @NOTE: delete on next step
+  this->spawnButton_ = std::make_unique<ui::Button>(
+      "Spawn", math::Rect{40.0f, 360.0f, 200.0f, 50.0f},
+      [this] { this->spawnCustomer(); });
+  this->spawnButton_->setTextScale(4.0f);
+
   SAL_LOGI("Salon: enter");
 }
 
 void SalonPlayState::onExit() {
   this->assets_.unload();
+  this->customers_.clear();
+  this->spawnButton_.reset();
   SAL_LOGI("Salon: exit");
 }
 
 void SalonPlayState::update(float deltaSeconds) {
   this->elapsed_ += deltaSeconds;
-  (void)deltaSeconds;
-  // @TODO: customer state machine and movement
+  this->spawnButton_->update(deltaSeconds);
+
+  for (auto &customer : this->customers_) {
+    customer.update(deltaSeconds);
+  }
+
+  for (auto &customer : this->customers_) {
+    this->applyCustomerTransition(customer);
+  }
+
+  this->removeGoneCustomers();
+}
+
+void SalonPlayState::applyCustomerTransition(Customer &customer) {
+  switch (customer.currentState()) {
+  case CustomerState::Arriving:
+    if (customer.hasArrived()) {
+      customer.setCurrentState(CustomerState::Queueing);
+    }
+    break;
+
+  case CustomerState::WalkingToSeat:
+    if (customer.hasArrived()) {
+      customer.setCurrentState(CustomerState::Seated);
+    }
+    break;
+
+  case CustomerState::Seated:
+    if (customer.hasSatLongEnough()) {
+      customer.setTargetPosition(cellCenter(kDoorCol, kDoorRow));
+      customer.setCurrentState(CustomerState::Leaving);
+    }
+    break;
+
+  case CustomerState::Queueing:
+  case CustomerState::Leaving:
+    break;
+  }
 }
 
 void SalonPlayState::render(graphics::SpriteBatch &batch) {
@@ -44,27 +98,12 @@ void SalonPlayState::render(graphics::SpriteBatch &batch) {
       graphics::Color{0.18f, 0.13f, 0.10f, 1.0f});
 
   this->renderGrid();
+
   this->renderCustomer();
+
   this->renderHud();
-}
 
-void SalonPlayState::onTouch(const input::TouchEvent &event) {
-  if (event.phase == input::TouchPhase::Down) {
-    // Exit region: top-left conter of the top HUD strip
-    if (event.position.y < kHudTopHeight &&
-        event.position.x < kExitButtonWidth) {
-      SAL_LOGE("Salon: exit tapped");
-      goTo<main_menu::MainMenuState>(*this->engine_);
-      return;
-    }
-
-    int col = 0;
-    int row = 0;
-    if (this->cellFromWorld(event.position, col, row)) {
-      SAL_LOGI("salon: tapped cell (%d, %d)", col, row);
-      this->customerPosition_ = cellCenter(col, row);
-    }
-  }
+  this->spawnButton_->render(this->renderer_);
 }
 
 void SalonPlayState::renderGrid() {
@@ -81,7 +120,7 @@ void SalonPlayState::renderGrid() {
   // Checkerboard tiles
   for (int row = 0; row < kGridRows; ++row) {
     for (int col = 0; col < kGridCols; ++col) {
-      const math::Rect cell{
+      const math::Rect cellRect{
           kGridOriginX + col * kTileSize,
           kGridOriginY + row * kTileSize,
           kTileSize,
@@ -89,27 +128,44 @@ void SalonPlayState::renderGrid() {
       };
 
       const bool alternate = ((col + row) & 1) != 0;
-      const graphics::Color c =
-          alternate ? graphics::Color{0.21f, 0.17f, 0.24f, 1.0f}
-                    : graphics::Color{0.18f, 0.15f, 0.21f, 1.0f};
-
-      this->renderer_.drawRect(cell.inset(1.0f), c);
+      const Cell &cell = getCell(col, row);
+      const graphics::Color color = cellColor(cell.type, alternate);
+      this->renderer_.drawRect(cellRect.inset(1.0f), color);
     }
   }
 }
 
 void SalonPlayState::renderCustomer() {
   // Placeholder customer
-  const math::Rect rect = math::Rect::fromCenter(
-      this->customerPosition_, this->customerSize_, this->customerSize_);
-  this->renderer_.drawRect(rect, graphics::Color{0.92f, 0.64f, 0.38f, 1.0f});
+  for (const auto &customer : this->customers_) {
+    graphics::Color bodyColor;
+    switch (customer.currentState()) {
+    case CustomerState::Arriving:
+    case CustomerState::WalkingToSeat:
+      bodyColor = {0.92f, 0.64f, 0.38f, 1.0f}; // warm orange
+      break;
+    case CustomerState::Queueing:
+      bodyColor = {0.92f, 0.82f, 0.38f, 1.0f}; // yellow — waiting
+      break;
+    case CustomerState::Seated:
+      bodyColor = {0.45f, 0.82f, 0.55f, 1.0f}; // green — satisfied
+      break;
+    case CustomerState::Leaving:
+      bodyColor = {0.60f, 0.60f, 0.65f, 1.0f}; // grey — gone
+      break;
+    }
 
-  // Small head so orientation is readable
-  const math::Rect head = math::Rect::fromCenter(
-      {this->customerPosition_.x,
-       this->customerPosition_.y - this->customerSize_ * 0.35f},
-      this->customerSize_ * 0.55f, this->customerSize_ * 0.55f);
-  this->renderer_.drawRect(head, graphics::Color{1.0f, 0.82f, 0.66f, 1.0f});
+    const math::Rect rect = math::Rect::fromCenter(
+        customer.currentPosition(), this->customerSize_, this->customerSize_);
+    this->renderer_.drawRect(rect, bodyColor);
+
+    // Small head so orientation is readable
+    const math::Rect head = math::Rect::fromCenter(
+        {customer.currentPosition().x,
+         customer.currentPosition().y - this->customerSize_ * 0.35f},
+        this->customerSize_ * 0.55f, this->customerSize_ * 0.55f);
+    this->renderer_.drawRect(head, graphics::Color{1.0f, 0.82f, 0.66f, 1.0f});
+  }
 }
 
 void SalonPlayState::renderHud() {
@@ -141,6 +197,58 @@ void SalonPlayState::renderHud() {
       graphics::Color{0.55f, 0.55f, 0.65f, 1.0f});
 }
 
+void SalonPlayState::onTouch(const input::TouchEvent &event) {
+  if (this->spawnButton_ && this->spawnButton_->onTouch(event)) {
+    return;
+  }
+
+  if (event.phase != input::TouchPhase::Down)
+    return;
+
+  if (event.phase == input::TouchPhase::Down) {
+    // Exit region: top-left conter of the top HUD strip
+    if (event.position.y < kHudTopHeight &&
+        event.position.x < kExitButtonWidth) {
+      SAL_LOGI("Salon: exit tapped");
+      goTo<main_menu::MainMenuState>(*this->engine_);
+      return;
+    }
+
+    Customer *hit = nullptr;
+    float bestDist = kCustomerHitRadius;
+
+    for (auto &customer : this->customers_) {
+      if (customer.currentState() != CustomerState::Queueing)
+        continue;
+
+      const float d = glm::distance(customer.currentPosition(), event.position);
+      if (d < bestDist) {
+        bestDist = d;
+        hit = &customer;
+      }
+    }
+    if (hit != nullptr) {
+      this->seatCustomer(*hit);
+    }
+  }
+}
+
+Cell &SalonPlayState::getCell(int col, int row) {
+  return this->grid_[row * kGridCols + col];
+}
+
+const Cell &SalonPlayState::getCell(int col, int row) const {
+  return this->grid_[row * kGridCols + col];
+}
+
+void SalonPlayState::initGrid() {
+  // Set door at entrance
+  getCell(kDoorCol, kDoorRow).type = CellType::Door;
+
+  // Set Waiting Seats
+  getCell(kSeatCol, kSeatRow).type = CellType::WaitingSeat;
+}
+
 math::Vec2 SalonPlayState::cellCenter(int col, int row) const {
   return {kGridOriginX + (col + 0.5f) * kTileSize,
           kGridOriginY + (row + 0.5f) * kTileSize};
@@ -162,6 +270,53 @@ bool SalonPlayState::cellFromWorld(const math::Vec2 &p, int &outCol,
   outCol = col;
   outRow = row;
   return true;
+}
+
+graphics::Color SalonPlayState::cellColor(CellType type, bool alternate) const {
+  switch (type) {
+  case CellType::Door:
+    return graphics::Color{0.45f, 0.25f, 0.15f, 1.0f};
+  case CellType::WaitingSeat:
+    return graphics::Color{0.20f, 0.40f, 0.55f, 1.0f};
+  case CellType::Empty:
+  default:
+    return alternate ? graphics::Color{0.21f, 0.17f, 0.24f, 1.0f}
+                     : graphics::Color{0.18f, 0.15f, 0.21f, 1.0f};
+  }
+}
+
+void SalonPlayState::spawnCustomer() {
+  ++this->nextCustomerId_;
+
+  const math::Vec2 spawnPos = cellCenter(kDoorCol, kDoorRow);
+  const math::Vec2 targetPos = cellCenter(kWaitCol, kWaitRow);
+
+  Customer customer(this->nextCustomerId_, CustomerState::Arriving, spawnPos);
+  customer.setTargetPosition(targetPos);
+
+  this->customers_.push_back(customer);
+
+  SAL_LOGI("Salon: spawning customer %u", this->nextCustomerId_);
+}
+
+void SalonPlayState::seatCustomer(Customer &customer) {
+  customer.setTargetPosition(cellCenter(kSeatCol, kSeatRow));
+  customer.setCurrentState(CustomerState::WalkingToSeat);
+}
+
+void SalonPlayState::removeGoneCustomers() {
+  // clang-format off
+  this->customers_.erase(
+    std::remove_if(
+      this->customers_.begin(),
+      this->customers_.end(),
+      [](const Customer &customer) {
+        return customer.currentState() == 
+          CustomerState::Leaving && customer.hasArrived();
+    }),
+    this->customers_.end()
+  );
+  // clang-format on
 }
 
 } // namespace salshalon::features::salon
