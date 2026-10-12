@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/GameConfig.hpp"
 #include "features/salon/SalonGrid.hpp"
 #include "features/salon/Station.hpp"
 #include "math/Math.hpp"
@@ -12,8 +13,9 @@ class SalonLayout {
 public:
   static constexpr int kCols = 12;
   static constexpr int kRows = 6;
-  static constexpr float kTileSize = 96.0f;
-  static constexpr float kOriginX = 64.0f; // centred: (1280 - 12*96)/2
+  static constexpr float kTileSize = 80.0f;
+  static constexpr float kOriginX =
+      (core::kDesignWidth - kCols * kTileSize) * 0.5f;
   static constexpr float kOriginY = 72.0f; // below the top HUD strip
 
   struct CellCoord {
@@ -21,7 +23,7 @@ public:
     int row;
   };
 
-  static constexpr CellCoord kDoorCell{0, 5};
+  static constexpr CellCoord kDoorCell{0, 4};
 
   static constexpr std::array<CellCoord, 3> kWaitSlots{{
       {3, 2},
@@ -74,6 +76,8 @@ public:
   /// Resets the layout to its starting configuration: door, wait slots, and
   /// a single cutting chair so the first session is playable.
   void reset();
+
+  void resetOccupantId();
 
 private:
   std::array<Cell, kCols * kRows> grid_{};

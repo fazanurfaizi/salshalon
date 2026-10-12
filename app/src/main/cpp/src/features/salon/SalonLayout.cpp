@@ -1,7 +1,5 @@
 #include "features/salon/SalonLayout.hpp"
 
-#include "core/Log.hpp"
-
 namespace salshalon::features::salon {
 
 SalonLayout::SalonLayout() { this->reset(); }
@@ -65,10 +63,16 @@ std::optional<StationInstance> SalonLayout::removeStationAt(int col, int row) {
   return std::nullopt;
 }
 
+void SalonLayout::resetOccupantId() {
+  for (auto &c : this->grid_) {
+    c.occupantId = 0;
+  }
+}
+
 void SalonLayout::reset() {
   for (auto &c : this->grid_) {
-    c.type = CellType::Empty;
     c.occupantId = 0;
+    c.type = CellType::Empty;
   }
   this->stations_.clear();
 

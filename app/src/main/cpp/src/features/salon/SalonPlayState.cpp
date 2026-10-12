@@ -11,6 +11,7 @@
 #include "features/salon/Customer.hpp"
 #include "features/salon/Session.hpp"
 #include "features/salon/SessionSummaryState.hpp"
+#include "features/salon/StationCatalog.hpp"
 #include "graphics/Color.hpp"
 #include "graphics/SpriteBatch.hpp"
 #include "input/TouchEvent.hpp"
@@ -52,6 +53,7 @@ void SalonPlayState::onEnter(core::Engine &engine) {
 }
 
 void SalonPlayState::onExit() {
+  this->context_->layout().resetOccupantId();
   this->assets_.unload();
   this->customers_.clear();
   this->closeButton_.reset();
@@ -125,8 +127,18 @@ void SalonPlayState::renderGrid() {
 
       const bool alternate = ((col + row) & 1) != 0;
       const Cell &cell = layout.cellAt(col, row);
-      this->renderer_.drawRect(cellRect.inset(1.0f),
-                               cellColor(cell.type, alternate));
+
+      const auto *station = layout.stationAt(col, row);
+      if (station != nullptr) {
+        const auto *archetype = StationCatalog::find(station->archetypeId);
+        const graphics::Color color = (archetype != nullptr)
+                                          ? archetype->placeholderColor
+                                          : cellColor(cell.type, alternate);
+        this->renderer_.drawRect(cellRect.inset(1.0f), color);
+      } else {
+        this->renderer_.drawRect(cellRect.inset(1.0f),
+                                 cellColor(cell.type, alternate));
+      }
 
       if (cell.occupantId != 0) {
         // @NOTE: fade marker on reserved cells. Remove when customer sprites

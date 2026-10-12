@@ -3,7 +3,7 @@
 #include "core/GameConfig.hpp"
 #include "core/Log.hpp"
 #include "features/Feature.hpp"
-#include "features/main_menu/MainMenuState.hpp"
+#include "features/salon/SalonBuildState.hpp"
 #include <string>
 
 namespace salshalon::features::salon {
@@ -112,7 +112,7 @@ void SessionSummaryState::render(graphics::SpriteBatch &batch) {
 void SessionSummaryState::buildUi() {
   const float buttonY = kDesignHeight * 0.5f + kPanelHeight * 0.5f + 40.0f;
   this->continueButton_ = std::make_unique<ui::Button>(
-      "CONTINUE",
+      "CONTINUE TO BUILD",
       math::Rect::fromCenter({kDesignWidth * 0.5f, buttonY}, kButtonWidth,
                              kButtonHeight),
       [this] { this->onContinuePressed(); });
@@ -121,7 +121,7 @@ void SessionSummaryState::buildUi() {
 
 void SessionSummaryState::onContinuePressed() {
   SAL_LOGI("Summary: continue");
-  goTo<main_menu::MainMenuState>(*this->engine_);
+  goTo<SalonBuildState>(*this->engine_);
 }
 
 } // namespace salshalon::features::salon
