@@ -1,10 +1,12 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "core/AssetManager.hpp"
 #include "core/Clock.hpp"
 #include "core/GLContext.hpp"
+#include "features/salon/SalonContext.hpp"
 #include "game/StateManager.hpp"
 #include "graphics/Camera2D.hpp"
 #include "graphics/SpriteBatch.hpp"
@@ -50,6 +52,9 @@ public:
   input::InputManager &input() { return input_; }
   game::StateManager &states() { return states_; }
 
+  /// Shared, persistent salon state.
+  features::salon::SalonContext &salon() { return *salon_; }
+
 private:
   GameActivity *activity_ = nullptr;
 
@@ -60,6 +65,8 @@ private:
   input::InputManager input_{};
   game::StateManager states_{};
   Clock clock{};
+
+  std::unique_ptr<features::salon::SalonContext> salon_{};
 
   std::vector<input::TouchEvent> pendingTouches_{};
 

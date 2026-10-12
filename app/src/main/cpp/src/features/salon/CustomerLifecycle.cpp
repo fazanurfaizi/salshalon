@@ -1,4 +1,4 @@
-#include "features/salon/CustomerState.hpp"
+#include "features/salon/CustomerLifecycle.hpp"
 #include "core/Log.hpp"
 #include <cassert>
 

@@ -7,6 +7,7 @@
 #include "core/GameConfig.hpp"
 #include "core/Log.hpp"
 #include "features/main_menu/MainMenuState.hpp"
+#include "features/salon/SalonContext.hpp"
 
 namespace salshalon::core {
 
@@ -18,6 +19,8 @@ void Engine::init(GameActivity *activity, AAssetManager *assetManager) {
   this->states_.setEngine(this);
   this->camera_.setDesignResolution(kDesignWidth, kDesignHeight);
   this->input_.setTransform(this->camera_.transform());
+
+  this->salon_ = std::make_unique<features::salon::SalonContext>();
   this->running_ = true;
 }
 

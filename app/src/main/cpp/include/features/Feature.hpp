@@ -2,6 +2,7 @@
 
 #include "core/Engine.hpp"
 #include <memory>
+#include <utility>
 
 namespace salshalon::game {
 class GameState;
@@ -9,8 +10,9 @@ class GameState;
 
 namespace salshalon::features {
 
-template <typename StateT> void goTo(core::Engine &engine) {
-  engine.states().change(std::make_unique<StateT>());
+template <typename StateT, typename... Args>
+void goTo(core::Engine &engine, Args &&...args) {
+  engine.states().change(std::make_unique<StateT>(std::forward<Args>(args)...));
 }
 
 } // namespace salshalon::features

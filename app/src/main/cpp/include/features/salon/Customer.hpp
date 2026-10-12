@@ -1,6 +1,6 @@
 #pragma once
 
-#include "features/salon/CustomerState.hpp"
+#include "features/salon/CustomerLifecycle.hpp"
 
 #include "math/Math.hpp"
 #include <cstdint>

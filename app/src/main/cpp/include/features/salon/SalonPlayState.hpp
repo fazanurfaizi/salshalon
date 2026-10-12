@@ -53,14 +53,26 @@ private:
   // HUD
   static constexpr float kHudTopHeight = 64.0f;
   static constexpr float kHudBottomHeight = 64.0f;
-  static constexpr float kExitButtonWidth = 200.0f;
 
   static constexpr float kCustomerSize = 64.0f;
   static constexpr float kCustomerHitRadius = 48.0f;
 
-  SalonContext context_{};
+  // Session
+  // @TODO: (M06) scale with difficulty. Fixed for now.
+  static constexpr float kSpawnIntervalSeconds = 6.0f;
+
+  /// Grace period before the first customer arrives.
+  static constexpr float kFirstSpawnDelaySeconds = 2.0f;
+
+  /// Small offset between the customer centre and the patience bar.
+  static constexpr float kPatienceBarHeight = 8.0f;
+  static constexpr float kPatienceBarGap = 12.0f;
+
+  SalonContext *context_ = nullptr;
+
   Assets assets_{};
   ui::Renderer renderer_{};
+  float elapsed_ = 0.0f;
 
   std::array<Cell, kGridCols * kGridRows> grid_{};
 
@@ -68,16 +80,24 @@ private:
 
   uint32_t nextCustomerId_{0};
 
-  // @NOTE: delete on next step
-  std::unique_ptr<ui::Button> spawnButton_;
+  float timeUntilNextSpawn_ = kFirstSpawnDelaySeconds;
 
+  uint32_t sessionServed_ = 0;
+  uint32_t sessionLost_ = 0;
+  int32_t sessionMoneyBefore_ = 0;
+  int32_t sessionReputationBefore_ = 0;
+
+  std::unique_ptr<ui::Button> closeButton_{};
   std::unique_ptr<ui::Toast> toast_{};
 
   // Customer lifecycle
+  void spawnTick(float deltaSeconds);
   void spawnCustomer();
   bool seatCustomer(Customer &customer);
   void applyCustomerTransition(Customer &customer);
   void removeGoneCustomers();
+
+  void onClosePressed();
 
   // Reservation helpers
   int findFreeWaitSlot() const;
@@ -108,6 +128,7 @@ private:
   void renderGrid();
   void renderHud();
   void renderCustomer();
+  void renderPatienceBar(const Customer &customer);
 };
 
 } // namespace salshalon::features::salon
