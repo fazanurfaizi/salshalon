@@ -8,7 +8,7 @@ enum class CellType : uint32_t {
   Empty,
   Door,
   WaitSlot,
-  Chair,
+  Station,
 };
 
 struct Cell {

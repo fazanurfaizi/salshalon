@@ -27,7 +27,6 @@ void SalonPlayState::onEnter(core::Engine &engine) {
   this->context_ = &engine.salon();
 
   this->assets_.load(engine.assets());
-  this->initGrid();
 
   this->sessionServed_ = 0;
   this->sessionLost_ = 0;
@@ -66,7 +65,7 @@ void SalonPlayState::update(float deltaSeconds) {
 
   this->spawnTick(deltaSeconds);
 
-  this->toast_->update(deltaSeconds);
+  this->closeButton_->update(deltaSeconds);
   this->toast_->update(deltaSeconds);
 
   for (auto &customer : this->customers_) {
@@ -100,34 +99,38 @@ void SalonPlayState::render(graphics::SpriteBatch &batch) {
 }
 
 void SalonPlayState::renderGrid() {
+  using L = SalonLayout;
+
   // Floor background under the tiles
   const math::Rect floorRect{
-      kGridOriginX,
-      kGridOriginY,
-      kGridCols * kTileSize,
-      kGridRows * kTileSize,
+      L::kOriginX,
+      L::kOriginY,
+      L::kCols * L::kTileSize,
+      L::kRows * L::kTileSize,
   };
   this->renderer_.drawRect(floorRect,
                            graphics::Color{0.16f, 0.13f, 0.18f, 1.0f});
 
+  const SalonLayout &layout = this->context_->layout();
+
   // Checkerboard tiles
-  for (int row = 0; row < kGridRows; ++row) {
-    for (int col = 0; col < kGridCols; ++col) {
+  for (int row = 0; row < L::kRows; ++row) {
+    for (int col = 0; col < L::kCols; ++col) {
       const math::Rect cellRect{
-          kGridOriginX + col * kTileSize,
-          kGridOriginY + row * kTileSize,
-          kTileSize,
-          kTileSize,
+          L::kOriginX + col * L::kTileSize,
+          L::kOriginY + row * L::kTileSize,
+          L::kTileSize,
+          L::kTileSize,
       };
 
       const bool alternate = ((col + row) & 1) != 0;
-      const Cell &cell = getCell(col, row);
+      const Cell &cell = layout.cellAt(col, row);
       this->renderer_.drawRect(cellRect.inset(1.0f),
                                cellColor(cell.type, alternate));
 
       if (cell.occupantId != 0) {
         // @NOTE: fade marker on reserved cells. Remove when customer sprites
-        this->renderer_.drawRect(cellRect.inset(kTileSize * 0.35f),
+        this->renderer_.drawRect(cellRect.inset(L::kTileSize * 0.35f),
                                  graphics::Color{1.0f, 1.0f, 1.0f, 0.15f});
       }
     }
@@ -251,72 +254,13 @@ void SalonPlayState::onTouch(const input::TouchEvent &event) {
   }
 }
 
-Cell &SalonPlayState::getCell(int col, int row) {
-  return this->grid_[row * kGridCols + col];
-}
-
-const Cell &SalonPlayState::getCell(int col, int row) const {
-  return this->grid_[row * kGridCols + col];
-}
-
-void SalonPlayState::initGrid() {
-  // Set door at entrance
-  getCell(kDoorCell.col, kDoorCell.row).type = CellType::Door;
-
-  for (const CellCoord &coord : kWaitSlots) {
-    getCell(coord.col, coord.row).type = CellType::WaitSlot;
-  }
-  for (const CellCoord &coord : kChairSlots) {
-    getCell(coord.col, coord.row).type = CellType::Chair;
-  }
-}
-
-Cell &SalonPlayState::cellByIndex(int index) { return this->grid_[index]; }
-
-const Cell &SalonPlayState::cellByIndex(int index) const {
-  return this->grid_[index];
-}
-
-int SalonPlayState::cellIndex(const CellCoord &coord) {
-  return coord.row * kGridCols + coord.col;
-}
-
-math::Vec2 SalonPlayState::cellCenter(int col, int row) const {
-  return {kGridOriginX + (col + 0.5f) * kTileSize,
-          kGridOriginY + (row + 0.5f) * kTileSize};
-}
-
-math::Vec2 SalonPlayState::cellCenterByIndex(int index) const {
-  const int col = index % kGridCols;
-  const int row = index / kGridCols;
-  return cellCenter(col, row);
-}
-
-bool SalonPlayState::cellFromWorld(const math::Vec2 &p, int &outCol,
-                                   int &outRow) const {
-  if (p.x < kGridOriginX || p.y < kGridOriginY)
-    return false;
-
-  const int col = static_cast<int>((p.x - kGridOriginX) / kTileSize);
-  const int row = static_cast<int>((p.y - kGridOriginY) / kTileSize);
-
-  if (col < 0 || col >= kGridCols)
-    return false;
-  if (row < 0 || row >= kGridRows)
-    return false;
-
-  outCol = col;
-  outRow = row;
-  return true;
-}
-
 graphics::Color SalonPlayState::cellColor(CellType type, bool alternate) const {
   switch (type) {
   case CellType::Door:
     return graphics::Color{0.45f, 0.25f, 0.15f, 1.0f};
   case CellType::WaitSlot:
     return graphics::Color{0.20f, 0.40f, 0.55f, 1.0f};
-  case CellType::Chair:
+  case CellType::Station:
     return graphics::Color{0.40f, 0.28f, 0.42f, 1.0f};
   case CellType::Empty:
   default:
@@ -327,6 +271,7 @@ graphics::Color SalonPlayState::cellColor(CellType type, bool alternate) const {
 
 // Customer helpers
 void SalonPlayState::applyCustomerTransition(Customer &customer) {
+  using L = SalonLayout;
   switch (customer.currentState()) {
   case CustomerState::Arriving:
     if (customer.hasArrived()) {
@@ -337,7 +282,8 @@ void SalonPlayState::applyCustomerTransition(Customer &customer) {
   case CustomerState::Queueing:
     if (customer.hasGivenUp()) {
       this->freeCustomerCell(customer);
-      customer.setTargetPosition(cellCenter(kDoorCell.col, kDoorCell.row));
+      customer.setTargetPosition(
+          L::cellCenter(L::kDoorCell.col, L::kDoorCell.row));
       customer.setCurrentState(CustomerState::Leaving);
       customer.setOutcome(CustomerOutcome::GaveUp);
     }
@@ -352,7 +298,8 @@ void SalonPlayState::applyCustomerTransition(Customer &customer) {
   case CustomerState::Seated:
     if (customer.hasSatLongEnough()) {
       this->freeCustomerCell(customer);
-      customer.setTargetPosition(cellCenter(kDoorCell.col, kDoorCell.row));
+      customer.setTargetPosition(
+          L::cellCenter(L::kDoorCell.col, L::kDoorCell.row));
       customer.setOutcome(CustomerOutcome::Served);
       customer.setCurrentState(CustomerState::Leaving);
     }
@@ -388,8 +335,9 @@ void SalonPlayState::spawnCustomer() {
 
   ++this->nextCustomerId_;
 
-  const math::Vec2 spawnPos = cellCenter(kDoorCell.col, kDoorCell.row);
-  const math::Vec2 waitPos = cellCenterByIndex(waitSlotIndex);
+  const math::Vec2 spawnPos = SalonLayout::cellCenter(
+      SalonLayout::kDoorCell.col, SalonLayout::kDoorCell.row);
+  const math::Vec2 waitPos = SalonLayout::cellCenterByIndex(waitSlotIndex);
 
   Customer customer(this->nextCustomerId_, CustomerState::Arriving, spawnPos);
   customer.setTargetPosition(waitPos);
@@ -402,23 +350,23 @@ void SalonPlayState::spawnCustomer() {
 }
 
 bool SalonPlayState::seatCustomer(Customer &customer) {
-  const int chairIndex = this->findFreeChair();
-  if (chairIndex < 0) {
+  const int stationIndex = this->findFreeStation();
+  if (stationIndex < 0) {
     SAL_LOGW("Salon: no free chair for customer: %u", customer.id());
     this->toast_->setKind(ui::ToastKind::Warning)
-        .setTitle("Warning!")
-        .show("No free chair");
+        .setTitle("No free station!")
+        .show("Buy more stations in build mode");
     return false;
   }
 
   this->freeCustomerCell(customer);
-  this->reserveCell(chairIndex, customer.id());
+  this->reserveCell(stationIndex, customer.id());
 
-  customer.setReserveCellIndex(chairIndex);
-  customer.setTargetPosition(cellCenterByIndex(chairIndex));
+  customer.setReserveCellIndex(stationIndex);
+  customer.setTargetPosition(SalonLayout::cellCenterByIndex(stationIndex));
   customer.setCurrentState(CustomerState::WalkingToSeat);
 
-  SAL_LOGI("Salon: customer %u -> chair %d", customer.id(), chairIndex);
+  SAL_LOGI("Salon: customer %u -> station %d", customer.id(), stationIndex);
   return true;
 }
 
@@ -446,18 +394,22 @@ void SalonPlayState::removeGoneCustomers() {
 
 // Reservation helpers
 int SalonPlayState::findFreeWaitSlot() const {
-  for (const CellCoord &coord : kWaitSlots) {
-    if (getCell(coord.col, coord.row).occupantId == 0) {
-      return cellIndex(coord);
+  using L = SalonLayout;
+  const SalonLayout &layout = this->context_->layout();
+  for (const auto &w : L::kWaitSlots) {
+    if (layout.cellAt(w.col, w.row).occupantId == 0) {
+      return L::cellIndex(w.col, w.row);
     }
   }
   return -1;
 }
 
-int SalonPlayState::findFreeChair() const {
-  for (const CellCoord &coord : kChairSlots) {
-    if (getCell(coord.col, coord.row).occupantId == 0) {
-      return cellIndex(coord);
+int SalonPlayState::findFreeStation() const {
+  using L = SalonLayout;
+  const SalonLayout &layout = this->context_->layout();
+  for (const auto &s : layout.stations()) {
+    if (layout.cellAt(s.gridX, s.gridY).occupantId == 0) {
+      return L::cellIndex(s.gridX, s.gridY);
     }
   }
   return -1;
@@ -466,13 +418,17 @@ int SalonPlayState::findFreeChair() const {
 void SalonPlayState::reserveCell(int index, uint32_t customerId) {
   if (index < 0)
     return;
-  this->cellByIndex(index).occupantId = customerId;
+  this->context_->layout()
+      .cellAt(index % SalonLayout::kCols, index / SalonLayout::kCols)
+      .occupantId = customerId;
 }
 
 void SalonPlayState::freeCell(int index) {
   if (index < 0)
     return;
-  cellByIndex(index).occupantId = 0;
+  this->context_->layout()
+      .cellAt(index % SalonLayout::kCols, index / SalonLayout::kCols)
+      .occupantId = 0;
 }
 
 void SalonPlayState::freeCustomerCell(Customer &customer) {

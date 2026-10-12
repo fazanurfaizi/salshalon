@@ -60,6 +60,8 @@ add_library(salshalon SHARED
     src/features/salon/Customer.cpp
     src/features/salon/CustomerLifecycle.cpp
     src/features/salon/SessionSummaryState.cpp
+    src/features/salon/SalonLayout.cpp
+    src/features/salon/StationCatalog.cpp
 
     src/features/settings/SettingsState.cpp
 )
