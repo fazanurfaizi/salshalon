@@ -9,6 +9,7 @@
 #include "ui/Renderer.hpp"
 #include "ui/Toast.hpp"
 #include <memory>
+#include <random>
 #include <vector>
 
 namespace salshalon::features::salon {
@@ -31,16 +32,11 @@ private:
   // Customer visuals
   static constexpr float kCustomerSize = 64.0f;
   static constexpr float kCustomerHitRadius = 48.0f;
-
   /// Small offset between the customer centre and the patience bar.
   static constexpr float kPatienceBarHeight = 8.0f;
   static constexpr float kPatienceBarGap = 12.0f;
 
   // Session
-  // @TODO: (M06) scale with difficulty. Fixed for now.
-  static constexpr float kSpawnIntervalSeconds = 6.0f;
-
-  /// Grace period before the first customer arrives.
   static constexpr float kFirstSpawnDelaySeconds = 2.0f;
 
   SalonContext *context_ = nullptr;
@@ -59,6 +55,12 @@ private:
   uint32_t sessionLost_ = 0;
   int32_t sessionMoneyBefore_ = 0;
   int32_t sessionReputationBefore_ = 0;
+
+  std::mt19937 rng_{0x5A15A10Fu};
+
+#ifndef NDEBUG
+  float debugLogTimer_ = 0.0f;
+#endif // !NDEBUG
 
   std::unique_ptr<ui::Button> closeButton_{};
   std::unique_ptr<ui::Toast> toast_{};
@@ -85,6 +87,10 @@ private:
   void renderHud();
   void renderCustomer();
   void renderPatienceBar(const Customer &customer);
+#ifndef NDEBUG
+  void renderDebugOverlay();
+#endif
+
   graphics::Color cellColor(CellType type, bool alternate) const;
   const graphics::Texture *cellTexture(CellType type) const;
 };

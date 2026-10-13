@@ -2,6 +2,7 @@
 
 #include <glm/geometric.hpp>
 #include <memory>
+#include <random>
 #include <string>
 
 #include "core/Engine.hpp"
@@ -9,6 +10,8 @@
 #include "core/Log.hpp"
 #include "features/Feature.hpp"
 #include "features/salon/Customer.hpp"
+#include "features/salon/CustomerCatalog.hpp"
+#include "features/salon/DifficultyCurve.hpp"
 #include "features/salon/Session.hpp"
 #include "features/salon/SessionSummaryState.hpp"
 #include "features/salon/StationCatalog.hpp"
@@ -79,6 +82,17 @@ void SalonPlayState::update(float deltaSeconds) {
   }
 
   this->removeGoneCustomers();
+
+#ifndef NDEBUG
+  this->debugLogTimer_ += deltaSeconds;
+  if (this->debugLogTimer_ >= 2.0f) {
+    this->debugLogTimer_ = 0.0f;
+    SAL_LOGD("Diff: score=%u spawn=%.2fs patMult=%.2f rep=%d",
+             this->sessionServed_, this->timeUntilNextSpawn_,
+             DifficultyCurve::patienceMultiplier(sessionServed_),
+             this->context_->reputation());
+  }
+#endif // !NDEBUG
 }
 
 void SalonPlayState::render(graphics::SpriteBatch &batch) {
@@ -92,6 +106,9 @@ void SalonPlayState::render(graphics::SpriteBatch &batch) {
   this->renderGrid();
   this->renderCustomer();
   this->renderHud();
+#ifndef NDEBUG
+  this->renderDebugOverlay();
+#endif // !NDEBUG
 
   this->closeButton_->render(this->renderer_);
 
@@ -156,21 +173,14 @@ void SalonPlayState::renderGrid() {
 void SalonPlayState::renderCustomer() {
   // Placeholder customer
   for (const auto &customer : this->customers_) {
-    graphics::Color bodyColor;
-    switch (customer.currentState()) {
-    case CustomerState::Arriving:
-    case CustomerState::WalkingToSeat:
-      bodyColor = {0.92f, 0.64f, 0.38f, 1.0f}; // warm orange
-      break;
-    case CustomerState::Queueing:
-      bodyColor = {0.92f, 0.82f, 0.38f, 1.0f}; // yellow — waiting
-      break;
-    case CustomerState::Seated:
-      bodyColor = {0.45f, 0.82f, 0.55f, 1.0f}; // green — satisfied
-      break;
-    case CustomerState::Leaving:
-      bodyColor = {0.60f, 0.60f, 0.65f, 1.0f}; // grey — gone
-      break;
+    graphics::Color bodyColor{0.7f, 0.7f, 0.7f, 1.0f};
+    if (const auto *arch = CustomerCatalog::find(customer.archetypeId())) {
+      bodyColor = arch->placeholderColor;
+    }
+
+    // Leaving customers fade out
+    if (customer.currentState() == CustomerState::Leaving) {
+      bodyColor.a *= 0.55f;
     }
 
     const math::Rect rect = math::Rect::fromCenter(
@@ -242,6 +252,43 @@ void SalonPlayState::renderHud() {
       {0.0f, kDesignHeight - kHudBottomHeight, kDesignWidth, kHudBottomHeight},
       graphics::Color{0.04f, 0.04f, 0.07f, 1.0f});
 }
+
+#ifndef NDEBUG
+void SalonPlayState::renderDebugOverlay() {
+  // Small debug panel at the top-left of the grid area.
+  const float x = 24.0f;
+  const float y = 80.0f;
+  std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+
+  const std::string line1 =
+      "score=" + std::to_string(this->sessionServed_) +
+      "  spawn=" + std::to_string(this->timeUntilNextSpawn_) + "s";
+
+  const std::string line2 =
+      "patMult=" +
+      std::to_string(
+          static_cast<int>(
+              DifficultyCurve::patienceMultiplier(this->sessionServed_) * 100) /
+          100.0f)
+          .substr(0, 4) +
+      "  rep=" + std::to_string(this->context_->reputation());
+
+  const std::string line3 =
+      "repSpawn x" +
+      std::to_string(static_cast<int>(DifficultyCurve::reputationSpawnFactor(
+                                          context_->reputation()) *
+                                      100) /
+                     100.0f)
+          .substr(0, 4);
+
+  this->renderer_.drawText(line1, {x, y}, 1.8f,
+                           graphics::Color{0.85f, 1.0f, 0.85f, 0.75f});
+  this->renderer_.drawText(line2, {x, y + 28.0f}, 1.8f,
+                           graphics::Color{0.85f, 1.0f, 0.85f, 0.75f});
+  this->renderer_.drawText(line3, {x, y + 56.0f}, 1.8f,
+                           graphics::Color{0.85f, 1.0f, 0.85f, 0.75f});
+}
+#endif
 
 void SalonPlayState::onTouch(const input::TouchEvent &event) {
   if (this->closeButton_ && this->closeButton_->onTouch(event))
@@ -350,10 +397,14 @@ void SalonPlayState::spawnTick(float deltaSeconds) {
   if (this->customers_.size() == before)
     return;
 
-  this->timeUntilNextSpawn_ = kSpawnIntervalSeconds;
+  std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+  this->timeUntilNextSpawn_ = DifficultyCurve::jitteredSpawnInterval(
+      this->sessionServed_, this->context_->reputation(), unit(this->rng_));
 }
 
 void SalonPlayState::spawnCustomer() {
+  using namespace DifficultyCurve;
+
   const int waitSlotIndex = this->findFreeWaitSlot();
   if (waitSlotIndex < 0) {
     SAL_LOGW("Salon: no free wait slot, spawn rejected");
@@ -363,13 +414,22 @@ void SalonPlayState::spawnCustomer() {
     return;
   }
 
+  const CustomerArchetype *arch = CustomerCatalog::pickForReputation(
+      this->context_->reputation(), this->rng_);
+  if (arch == nullptr)
+    return;
+
   ++this->nextCustomerId_;
+
+  const float patience = kBasePatienceSeconds * arch->patienceMultiplier *
+                         patienceMultiplier(this->sessionServed_);
 
   const math::Vec2 spawnPos = SalonLayout::cellCenter(
       SalonLayout::kDoorCell.col, SalonLayout::kDoorCell.row);
   const math::Vec2 waitPos = SalonLayout::cellCenterByIndex(waitSlotIndex);
 
-  Customer customer(this->nextCustomerId_, CustomerState::Arriving, spawnPos);
+  Customer customer(this->nextCustomerId_, CustomerState::Arriving, spawnPos,
+                    arch->id, patience, arch->tipMultiplier);
   customer.setTargetPosition(waitPos);
   customer.setReserveCellIndex(waitSlotIndex);
 
@@ -406,10 +466,13 @@ void SalonPlayState::removeGoneCustomers() {
     if (it->currentState() == CustomerState::Leaving && it->hasArrived()) {
       this->freeCustomerCell(*it);
       switch (it->outcome()) {
-      case CustomerOutcome::Served:
+      case CustomerOutcome::Served: {
+        const int32_t payout = static_cast<int32_t>(
+            DifficultyCurve::kBasePayout * it->tipMultiplier());
+        this->context_->onCustomerServed(payout);
         ++this->sessionServed_;
-        this->context_->onCustomerServed(50);
         break;
+      }
       case CustomerOutcome::GaveUp:
         ++this->sessionLost_;
         this->context_->onCustomerLost();
@@ -483,9 +546,7 @@ void SalonPlayState::onClosePressed() {
            result.customersServed, result.customersLost);
 
   this->context_->recordDayResult(this->sessionServed_);
-
   this->context_->advanceDay();
-
   this->engine_->saveProfile();
 
   goTo<SessionSummaryState>(*this->engine_, result);

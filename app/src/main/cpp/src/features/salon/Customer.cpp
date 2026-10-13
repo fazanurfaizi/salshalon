@@ -7,11 +7,16 @@
 
 namespace salshalon::features::salon {
 
-Customer::Customer(uint32_t id, CustomerState state, math::Vec2 spawnPosition)
-    : id_(id), currentState_(state), currentPosition_(spawnPosition) {}
+Customer::Customer(uint32_t id, CustomerState state, math::Vec2 spawnPosition,
+                   std::string archetypeId, float patienceSeconds,
+                   float tipMultiplier)
+    : id_(id), currentPosition_(spawnPosition), targetPosition_(spawnPosition),
+      currentState_(state), archetypeId_(std::move(archetypeId)),
+      patienceSeconds_(patienceSeconds), tipMultiplier_(tipMultiplier) {}
 
 void Customer::update(float deltaSeconds) {
   this->stateTimer_.addTime(this->currentState_, deltaSeconds);
+
   switch (this->currentState_) {
   case CustomerState::Arriving:
   case CustomerState::WalkingToSeat:
@@ -35,7 +40,15 @@ bool Customer::hasSatLongEnough() const {
 }
 
 bool Customer::hasGivenUp() const {
-  return this->stateTimer_.get(CustomerState::Queueing) >= kPatienceSeconds;
+  return this->stateTimer_.get(CustomerState::Queueing) >=
+         this->patienceSeconds_;
+}
+
+float Customer::queueElapsedFraction() const {
+  if (this->patienceSeconds_ <= 0.0f)
+    return 1.0f;
+  return this->stateTimer_.get(CustomerState::Queueing) /
+         this->patienceSeconds_;
 }
 
 void Customer::setCurrentPosition(const math::Vec2 &position) {
