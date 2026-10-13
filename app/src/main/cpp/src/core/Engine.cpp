@@ -8,12 +8,14 @@
 #include "core/Log.hpp"
 #include "features/main_menu/MainMenuState.hpp"
 #include "features/salon/SalonContext.hpp"
+#include "features/salon/SaveSystem.hpp"
 
 namespace salshalon::core {
 
 Engine::~Engine() { this->shutdown(); }
 
-void Engine::init(GameActivity *activity, AAssetManager *assetManager) {
+void Engine::init(GameActivity *activity, AAssetManager *assetManager,
+                  const char *internalDataPath) {
   this->activity_ = activity;
   this->assets_.setAssetManager(assetManager);
   this->states_.setEngine(this);
@@ -21,6 +23,19 @@ void Engine::init(GameActivity *activity, AAssetManager *assetManager) {
   this->input_.setTransform(this->camera_.transform());
 
   this->salon_ = std::make_unique<features::salon::SalonContext>();
+  if (internalDataPath != nullptr && internalDataPath[0] != '\0') {
+    this->saveFilePath_ =
+        features::salon::SaveSystem::profilePath(internalDataPath);
+    const auto loaded = features::salon::SaveSystem::load(this->saveFilePath_);
+    if (loaded) {
+      this->salon_->applyProfile(*loaded);
+    } else {
+      SAL_LOGI("Engine: no save found, using default profile");
+    }
+  } else {
+    SAL_LOGW("Engine: no internal data path — saves disabled");
+  }
+
   this->running_ = true;
 }
 
@@ -134,6 +149,15 @@ void Engine::requestQuit() {
     GameActivity_finish(this->activity_);
     // ANativeActivity_finish(this->activity_);
   }
+}
+
+bool Engine::saveProfile() {
+  if (this->saveFilePath_.empty() || !this->salon_) {
+    SAL_LOGW("Engine::saveProfile: no path configured");
+    return false;
+  }
+  return features::salon::SaveSystem::save(this->saveFilePath_,
+                                           this->salon_->toProfile());
 }
 
 } // namespace salshalon::core

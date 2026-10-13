@@ -38,6 +38,8 @@ public:
 
   float measureText(const std::string &text, float scale) const;
 
+  graphics::SpriteBatch *batch() { return this->batch_; }
+
 private:
   graphics::SpriteBatch *batch_ = nullptr;
   graphics::Font font_{};

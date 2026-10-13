@@ -6,7 +6,8 @@
 namespace salshalon::features::main_menu {
 
 bool Assets::load(core::AssetManager &assetManager) {
-  if (!background.loadFromAsset(assetManager, "textures/main_menu_bg.png")) {
+  if (!background.loadFromAsset(assetManager,
+                                "features/main_menu/station.png")) {
     background.createGradient(4, 256,
                               graphics::Color{0.06f, 0.07f, 0.13f, 1.0f},
                               graphics::Color{0.24f, 0.12f, 0.26f, 1.0f});

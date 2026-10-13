@@ -136,8 +136,12 @@ void SalonPlayState::renderGrid() {
                                           : cellColor(cell.type, alternate);
         this->renderer_.drawRect(cellRect.inset(1.0f), color);
       } else {
-        this->renderer_.drawRect(cellRect.inset(1.0f),
-                                 cellColor(cell.type, alternate));
+        if (const auto *tex = this->cellTexture(cell.type)) {
+          this->renderer_.batch()->draw(*tex, cellRect.inset(1.0f));
+        } else {
+          this->renderer_.drawRect(cellRect.inset(1.0f),
+                                   cellColor(cell.type, alternate));
+        }
       }
 
       if (cell.occupantId != 0) {
@@ -278,6 +282,20 @@ graphics::Color SalonPlayState::cellColor(CellType type, bool alternate) const {
   default:
     return alternate ? graphics::Color{0.21f, 0.17f, 0.24f, 1.0f}
                      : graphics::Color{0.18f, 0.15f, 0.21f, 1.0f};
+  }
+}
+
+const graphics::Texture *SalonPlayState::cellTexture(CellType type) const {
+  switch (type) {
+  case CellType::Door:
+    return &this->assets_.door;
+  case CellType::WaitSlot:
+    return &this->assets_.chair;
+  case CellType::Station:
+    return nullptr;
+  case CellType::Empty:
+  default:
+    return &this->assets_.floor;
   }
 }
 
@@ -464,7 +482,11 @@ void SalonPlayState::onClosePressed() {
   SAL_LOGI("Salon: closing day %d (served %u, lost %u)", result.day,
            result.customersServed, result.customersLost);
 
+  this->context_->recordDayResult(this->sessionServed_);
+
   this->context_->advanceDay();
+
+  this->engine_->saveProfile();
 
   goTo<SessionSummaryState>(*this->engine_, result);
 }

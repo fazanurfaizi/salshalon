@@ -86,6 +86,7 @@ private:
   void renderCustomer();
   void renderPatienceBar(const Customer &customer);
   graphics::Color cellColor(CellType type, bool alternate) const;
+  const graphics::Texture *cellTexture(CellType type) const;
 };
 
 } // namespace salshalon::features::salon

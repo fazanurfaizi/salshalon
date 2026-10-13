@@ -2,6 +2,7 @@
 #pragma once
 
 #include "features/salon/SalonLayout.hpp"
+#include "features/salon/SalonProfile.hpp"
 #include <cstdint>
 
 namespace salshalon::features::salon {
@@ -14,6 +15,8 @@ public:
   int32_t money() const { return this->money_; }
   int32_t reputation() const { return this->reputation_; }
   int32_t day() const { return this->day_; }
+  uint32_t totalCustomersServed() const { return this->totalCustomersServed_; }
+  uint32_t bestDayCustomers() const { return this->bestDayCustomers_; }
 
   bool earn(int32_t amount);
   bool trySpend(int32_t amount);
@@ -27,9 +30,15 @@ public:
   void onCustomerServed(int32_t payout);
   void onCustomerLost();
 
+  void recordDayResult(uint32_t served);
+
   // Layout
   SalonLayout &layout() { return this->layout_; }
   const SalonLayout &layout() const { return this->layout_; }
+
+  SalonProfile toProfile() const;
+
+  void applyProfile(const SalonProfile &profile);
 
 private:
   static constexpr int32_t kDailyReputationDecay = 1;
@@ -39,6 +48,8 @@ private:
   int32_t money_ = 200;
   int32_t reputation_ = 0;
   int32_t day_ = 1;
+  uint32_t totalCustomersServed_ = 0;
+  uint32_t bestDayCustomers_ = 0;
 
   SalonLayout layout_{};
 };

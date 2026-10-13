@@ -50,8 +50,50 @@ void SalonContext::advanceDay() {
 void SalonContext::onCustomerServed(int32_t payout) {
   this->earn(payout);
   this->adjustReputation(1);
+  ++this->totalCustomersServed_;
 }
 
 void SalonContext::onCustomerLost() { this->adjustReputation(-5); }
+
+void SalonContext::recordDayResult(uint32_t served) {
+  if (served > this->bestDayCustomers_) {
+    this->bestDayCustomers_ = served;
+    SAL_LOGI("SalonContext: new best day — %u customers", served);
+  }
+}
+
+SalonProfile SalonContext::toProfile() const {
+  SalonProfile p;
+  p.version = SalonProfile::kCurrentVersion;
+  p.money = money_;
+  p.reputation = reputation_;
+  p.day = static_cast<uint32_t>(day_);
+  p.totalCustomersServed = totalCustomersServed_;
+  p.bestDayCustomers = bestDayCustomers_;
+  p.stations = layout_.stations();
+  return p;
+}
+
+void SalonContext::applyProfile(const SalonProfile &profile) {
+  money_ = profile.money;
+  reputation_ = profile.reputation;
+  day_ = static_cast<int32_t>(profile.day);
+  totalCustomersServed_ = profile.totalCustomersServed;
+  bestDayCustomers_ = profile.bestDayCustomers;
+
+  layout_.reset();
+  if (!profile.stations.empty()) {
+    while (!layout_.stations().empty()) {
+      const auto &s = layout_.stations().front();
+      layout_.removeStationAt(s.gridX, s.gridY);
+    }
+    for (const auto &s : profile.stations) {
+      layout_.placeStation(s);
+    }
+  }
+
+  SAL_LOGI("SalonContext: applied profile — $%d, rep %d, day %d, %zu stations",
+           money_, reputation_, day_, layout_.stations().size());
+}
 
 } // namespace salshalon::features::salon

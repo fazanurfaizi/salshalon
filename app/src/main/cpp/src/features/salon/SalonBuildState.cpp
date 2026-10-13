@@ -268,6 +268,11 @@ void SalonBuildState::onCellTapped(int col, int row) {
     const auto result = BuildSystem::remove(*this->context_, col, row);
     if (result == BuildSystem::Result::NothingToRemove)
       return;
+
+    if (result == BuildSystem::Result::Success) {
+      this->engine_->saveProfile();
+    }
+
     this->toast_
         .setKind(result == BuildSystem::Result::Success
                      ? ui::ToastKind::Success
@@ -284,6 +289,7 @@ void SalonBuildState::onCellTapped(int col, int row) {
 
   if (result == BuildSystem::Result::Success) {
     this->selectedArchetypeId_.clear();
+    this->engine_->saveProfile();
     return;
   }
   this->toast_.setKind(ui::ToastKind::Warning)

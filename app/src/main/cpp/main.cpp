@@ -126,7 +126,13 @@ void android_main(struct android_app *app) {
   SAL_LOGI("android_main: starting");
 
   auto engine = std::make_unique<salshalon::core::Engine>();
-  engine->init(app->activity, app->activity->assetManager);
+
+  const char *dataPath = nullptr;
+  if (app->activity != nullptr) {
+    dataPath = app->activity->internalDataPath;
+  }
+
+  engine->init(app->activity, app->activity->assetManager, dataPath);
 
   app->userData = engine.get();
   app->onAppCmd = handle_cmd;
@@ -136,7 +142,7 @@ void android_main(struct android_app *app) {
   auto nextFrameAt = std::chrono::steady_clock::now();
 
   while (!app->destroyRequested && engine->running()) {
-    // ---- 1. Drain all pending Android events (non-blocking).
+    //  Drain all pending Android events (non-blocking).
     bool drained = false;
     while (!drained) {
       int events = 0;
@@ -162,11 +168,11 @@ void android_main(struct android_app *app) {
       }
     }
 
-    // ---- 2. Feed input into the engine, run one frame.
+    // Feed input into the engine, run one frame.
     pumpInput(app, *engine);
     engine->frame();
 
-    // ---- 3. Frame pacing.
+    // Frame pacing.
     nextFrameAt += kFrameBudget;
     std::this_thread::sleep_until(nextFrameAt);
     if (std::chrono::steady_clock::now() > nextFrameAt + kFrameBudget) {

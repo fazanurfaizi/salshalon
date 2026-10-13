@@ -28,7 +28,8 @@ public:
   Engine &operator=(const Engine &) = delete;
 
   /// Called once from android_main, before event loop.
-  void init(GameActivity *activity, AAssetManager *assetManager);
+  void init(GameActivity *activity, AAssetManager *assetManager,
+            const char *internalDataPath);
 
   void shutdown();
 
@@ -55,6 +56,8 @@ public:
   /// Shared, persistent salon state.
   features::salon::SalonContext &salon() { return *salon_; }
 
+  bool saveProfile();
+
 private:
   GameActivity *activity_ = nullptr;
 
@@ -67,6 +70,7 @@ private:
   Clock clock{};
 
   std::unique_ptr<features::salon::SalonContext> salon_{};
+  std::string saveFilePath_{};
 
   std::vector<input::TouchEvent> pendingTouches_{};
 

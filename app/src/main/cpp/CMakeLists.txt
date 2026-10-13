@@ -4,7 +4,7 @@ project("salshalon")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -ffast-math -fno-exceptions -fno-rtti")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -ffast-math -fno-rtti")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(FetchContent)
@@ -18,6 +18,12 @@ else()
     GIT_SHALLOW    TRUE)
   FetchContent_MakeAvailable(glm)
 endif()
+
+FetchContent_Declare(json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG        v3.11.3
+    GIT_SHALLOW    TRUE)
+FetchContent_MakeAvailable(json)
 
 # Include android_native_app_glue
 add_library(app_glue STATIC
@@ -50,6 +56,8 @@ add_library(salshalon SHARED
     src/ui/Toast.cpp
     src/ui/Dialog.cpp
 
+    src/util/binary_serializer.cpp
+
     # Features
     src/features/main_menu/MainMenuState.cpp
     src/features/main_menu/MainMenuAssets.cpp
@@ -64,6 +72,7 @@ add_library(salshalon SHARED
     src/features/salon/SalonLayout.cpp
     src/features/salon/StationCatalog.cpp
     src/features/salon/SalonBuildState.cpp
+    src/features/salon/SaveSystem.cpp
 
     src/features/settings/SettingsState.cpp
 )
@@ -91,8 +100,8 @@ set(CMAKE_SHARED_LINKER_FLAGS
 target_link_libraries(salshalon
         # The game activity
         game-activity::game-activity_static
-
         glm
+        nlohmann_json::nlohmann_json
         EGL
         GLESv3
         jnigraphics

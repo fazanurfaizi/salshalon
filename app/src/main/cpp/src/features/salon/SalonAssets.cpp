@@ -5,7 +5,9 @@
 namespace salshalon::features::salon {
 
 bool Assets::load(core::AssetManager &assetManager) {
-  floor.loadFromAsset(assetManager, "features/salon/floor.png");
+  floor.loadFromAsset(assetManager, "features/salon/floor.jpg");
+  chair.loadFromAsset(assetManager, "features/salon/chair.jpg");
+  door.loadFromAsset(assetManager, "features/salon/door.jpg");
   return true;
 }
 
