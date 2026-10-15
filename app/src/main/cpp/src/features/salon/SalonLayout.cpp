@@ -1,5 +1,5 @@
 #include "features/salon/SalonLayout.hpp"
-#include "features/salon/Station.hpp"
+#include "features/salon/stations/Station.hpp"
 
 namespace salshalon::features::salon {
 

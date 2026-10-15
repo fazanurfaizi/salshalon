@@ -1,6 +1,6 @@
 #pragma once
 
-#include "features/salon/Station.hpp"
+#include "features/salon/stations/Station.hpp"
 #include <string>
 #include <vector>
 

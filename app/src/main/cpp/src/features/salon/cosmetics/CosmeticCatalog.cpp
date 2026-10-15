@@ -1,4 +1,4 @@
-#include "features/salon/CosmeticCatalog.hpp"
+#include "features/salon/cosmetics/CosmeticCatalog.hpp"
 
 namespace salshalon::features::salon {
 

@@ -1,4 +1,4 @@
-#include "features/salon/StationCatalog.hpp"
+#include "features/salon/stations/StationCatalog.hpp"
 
 namespace salshalon::features::salon {
 

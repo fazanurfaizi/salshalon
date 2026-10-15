@@ -3,8 +3,8 @@
 #include <memory>
 #include <string>
 
-#include "features/salon/CosmeticCatalog.hpp"
 #include "features/salon/SalonContext.hpp"
+#include "features/salon/cosmetics/CosmeticCatalog.hpp"
 #include "game/GameState.hpp"
 #include "math/Rect.hpp"
 #include "ui/Button.hpp"
@@ -73,17 +73,11 @@ private:
   void onOpenSalonPressed();
   void onMenuPressed();
 
-  // Render
-  void renderGrid();
-  void renderStations();
-  void renderDecor();
   void renderHud();
   void renderTabs();
   void renderItemStrip();
   void renderStationItems();
   void renderCosmeticItems(CosmeticKind kind);
-
-  graphics::Color cellColor(CellType type, bool alternate) const;
 };
 
 } // namespace salshalon::features::salon

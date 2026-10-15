@@ -1,4 +1,4 @@
-#include "features/salon/CustomerCatalog.hpp"
+#include "features/salon/customers/CustomerCatalog.hpp"
 
 #include <algorithm>
 #include <cmath>

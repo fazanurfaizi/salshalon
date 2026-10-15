@@ -8,7 +8,8 @@
 #include "features/main_menu/MainMenuState.hpp"
 #include "features/salon/BuildSystem.hpp"
 #include "features/salon/SalonPlayState.hpp"
-#include "features/salon/StationCatalog.hpp"
+#include "features/salon/stations/StationCatalog.hpp"
+#include "features/salon/shared/SalonRenderer.hpp"
 
 namespace salshalon::features::salon {
 
@@ -67,16 +68,8 @@ void SalonBuildState::update(float deltaSeconds) {
 void SalonBuildState::render(graphics::SpriteBatch &batch) {
   this->renderer_.setBatch(&batch);
 
-  // Wall background
-  const auto *wallArch = CosmeticCatalog::find(this->context_->currentWallId());
-  const graphics::Color wallColor =
-      wallArch ? wallArch->primary : graphics::Color{0.30f, 0.26f, 0.22f, 1.0f};
-  this->renderer_.drawRect({0.0f, 0.0f, kDesignWidth, kDesignHeight},
-                           wallColor);
-
-  this->renderGrid();
-  this->renderStations();
-  this->renderDecor();
+  SalonRenderer::renderRoom(this->renderer_, *this->context_,
+                            /*showOccupants=*/false);
   this->renderHud();
   this->renderTabs();
   this->renderItemStrip();
@@ -88,76 +81,6 @@ void SalonBuildState::render(graphics::SpriteBatch &batch) {
       this->renderer_,
       {kDesignWidth * 0.5f, kDesignHeight - kHudBottomHeight - 40.0f},
       ui::ToastAnchor::BottomCenter);
-}
-
-void SalonBuildState::renderGrid() {
-  using L = SalonLayout;
-
-  const auto *floorArch =
-      CosmeticCatalog::find(this->context_->currentFloorId());
-  const graphics::Color tileA =
-      floorArch ? floorArch->primary
-                : graphics::Color{0.20f, 0.20f, 0.14f, 1.0f};
-  const graphics::Color tileB =
-      floorArch ? floorArch->secondary
-                : graphics::Color{0.32f, 0.23f, 0.16f, 1.0f};
-
-  // Floor background under the tiles
-  const math::Rect floorRect{
-      L::kOriginX,
-      L::kOriginY,
-      L::kCols * L::kTileSize,
-      L::kRows * L::kTileSize,
-  };
-  this->renderer_.drawRect(floorRect,
-                           graphics::Color{0.16f, 0.13f, 0.18f, 1.0f});
-
-  const SalonLayout &layout = this->context_->layout();
-
-  // Checkerboard tiles
-  for (int row = 0; row < L::kRows; ++row) {
-    for (int col = 0; col < L::kCols; ++col) {
-      const math::Rect cellRect{
-          L::kOriginX + col * L::kTileSize,
-          L::kOriginY + row * L::kTileSize,
-          L::kTileSize,
-          L::kTileSize,
-      };
-
-      const bool alternate = ((col + row) & 1) != 0;
-      const Cell &cell = layout.cellAt(col, row);
-
-      graphics::Color fill;
-      if (cell.type == CellType::Empty) {
-        fill = alternate ? tileB : tileA;
-      } else {
-        fill = cellColor(cell.type, alternate);
-      }
-      this->renderer_.drawRect(cellRect.inset(1.0f), fill);
-    }
-  }
-}
-
-void SalonBuildState::renderStations() {
-  using L = SalonLayout;
-  const SalonLayout &layout = this->context_->layout();
-
-  for (const auto &inst : layout.stations()) {
-    const math::Rect cellRect{
-        L::kOriginX + inst.gridX * L::kTileSize,
-        L::kOriginY + inst.gridY * L::kTileSize,
-        L::kTileSize,
-        L::kTileSize,
-    };
-
-    const StationArchetype *arch = StationCatalog::find(inst.archetypeId);
-    const graphics::Color color =
-        arch ? arch->placeholderColor : graphics::Color{0.7f, 0.7f, 0.7f, 1.0f};
-
-    this->renderer_.drawRect(cellRect.inset(8.0f), color);
-    this->renderer_.drawFrame(cellRect.inset(8.0f),
-                              graphics::Color{1.0f, 1.0f, 1.0f, 0.30}, 2.0f);
-  }
 }
 
 void SalonBuildState::renderHud() {
@@ -298,24 +221,6 @@ void SalonBuildState::renderCosmeticItems(CosmeticKind kind) {
       this->renderer_.drawText("Locked", {rect.x + 64.0f, rect.y + 48.0f}, 2.2f,
                                graphics::Color{0.55f, 0.55f, 0.60f, 1.0f});
     }
-  }
-}
-
-void SalonBuildState::renderDecor() {
-  using L = SalonLayout;
-  for (const auto &d : this->context_->layout().decors()) {
-    const math::Rect cellRect{
-        L::kOriginX + d.gridX * L::kTileSize,
-        L::kOriginY + d.gridY * L::kTileSize,
-        L::kTileSize,
-        L::kTileSize,
-    };
-    const auto *arch = CosmeticCatalog::find(d.archetypeId);
-    const graphics::Color c =
-        arch ? arch->primary : graphics::Color{0.7f, 0.7f, 0.7f, 1.0f};
-    this->renderer_.drawRect(cellRect.inset(L::kTileSize * 0.20f), c);
-    this->renderer_.drawFrame(cellRect.inset(L::kTileSize * 0.20f),
-                              graphics::Color{1.0f, 1.0f, 1.0f, 0.25f}, 2.0f);
   }
 }
 
@@ -556,22 +461,6 @@ void SalonBuildState::onMenuPressed() {
   if (this->engine_ != nullptr)
     this->engine_->audio().play(audio::Sfx::Tap);
   goTo<main_menu::MainMenuState>(*this->engine_);
-}
-
-graphics::Color SalonBuildState::cellColor(CellType type,
-                                           bool alternate) const {
-  switch (type) {
-  case CellType::Door:
-    return {0.45f, 0.25f, 0.15f, 1.0f};
-  case CellType::WaitSlot:
-    return {0.20f, 0.40f, 0.55f, 1.0f};
-  case CellType::Station:
-    return {0.30f, 0.24f, 0.32f, 1.0f};
-  case CellType::Empty:
-  default:
-    return alternate ? graphics::Color{0.21f, 0.17f, 0.24f, 1.0f}
-                     : graphics::Color{0.18f, 0.15f, 0.21f, 1.0f};
-  }
 }
 
 } // namespace salshalon::features::salon

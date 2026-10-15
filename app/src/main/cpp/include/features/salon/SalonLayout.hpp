@@ -2,7 +2,7 @@
 
 #include "core/GameConfig.hpp"
 #include "features/salon/SalonGrid.hpp"
-#include "features/salon/Station.hpp"
+#include "features/salon/stations/Station.hpp"
 #include "math/Math.hpp"
 #include <array>
 #include <vector>

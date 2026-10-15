@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "features/salon/Station.hpp"
+#include "features/salon/stations/Station.hpp"
 
 namespace salshalon::features::salon {
 

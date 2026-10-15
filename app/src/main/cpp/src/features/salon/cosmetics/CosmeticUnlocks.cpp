@@ -1,7 +1,7 @@
-#include "features/salon/CosmeticUnlocks.hpp"
+#include "features/salon/cosmetics/CosmeticUnlocks.hpp"
 
 #include "core/Log.hpp"
-#include "features/salon/CosmeticCatalog.hpp"
+#include "features/salon/cosmetics/CosmeticCatalog.hpp"
 #include "features/salon/SalonContext.hpp"
 
 namespace salshalon::features::salon::CosmeticUnlocks {

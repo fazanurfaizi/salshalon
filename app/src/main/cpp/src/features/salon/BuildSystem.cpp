@@ -2,7 +2,7 @@
 
 #include "core/Log.hpp"
 #include "features/salon/SalonContext.hpp"
-#include "features/salon/StationCatalog.hpp"
+#include "features/salon/stations/StationCatalog.hpp"
 
 namespace salshalon::features::salon::BuildSystem {
 

@@ -68,19 +68,22 @@ add_library(salshalon SHARED
 
     src/features/salon/BuildSystem.cpp
     src/features/salon/SalonPlayState.cpp
+    src/features/salon/play/CustomerManager.cpp
+    src/features/salon/play/Tutorial.cpp
+    src/features/salon/shared/SalonRenderer.cpp
     src/features/salon/SalonContext.cpp
     src/features/salon/SalonAssets.cpp
-    src/features/salon/Customer.cpp
-    src/features/salon/CustomerLifecycle.cpp
+    src/features/salon/customers/Customer.cpp
+    src/features/salon/customers/CustomerLifecycle.cpp
+    src/features/salon/customers/CustomerCatalog.cpp
     src/features/salon/SessionSummaryState.cpp
     src/features/salon/SalonLayout.cpp
-    src/features/salon/StationCatalog.cpp
+    src/features/salon/stations/StationCatalog.cpp
     src/features/salon/SalonBuildState.cpp
     src/features/salon/SaveSystem.cpp
-    src/features/salon/CustomerCatalog.cpp
     src/features/salon/DifficultyCurve.cpp
-    src/features/salon/CosmeticCatalog.cpp
-    src/features/salon/CosmeticUnlocks.cpp
+    src/features/salon/cosmetics/CosmeticCatalog.cpp
+    src/features/salon/cosmetics/CosmeticUnlocks.cpp
 
     src/features/settings/SettingsState.cpp
 )

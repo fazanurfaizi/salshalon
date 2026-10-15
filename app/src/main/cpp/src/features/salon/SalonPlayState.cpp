@@ -1,9 +1,7 @@
 #include "features/salon/SalonPlayState.hpp"
 
 #include <cmath>
-#include <glm/geometric.hpp>
 #include <memory>
-#include <random>
 #include <string>
 
 #include "audio/Sfx.hpp"
@@ -11,14 +9,12 @@
 #include "core/GameConfig.hpp"
 #include "core/Log.hpp"
 #include "features/Feature.hpp"
-#include "features/salon/CosmeticCatalog.hpp"
-#include "features/salon/CosmeticUnlocks.hpp"
-#include "features/salon/Customer.hpp"
-#include "features/salon/CustomerCatalog.hpp"
 #include "features/salon/DifficultyCurve.hpp"
 #include "features/salon/Session.hpp"
 #include "features/salon/SessionSummaryState.hpp"
-#include "features/salon/StationCatalog.hpp"
+#include "features/salon/cosmetics/CosmeticUnlocks.hpp"
+#include "features/salon/customers/CustomerCatalog.hpp"
+#include "features/salon/shared/SalonRenderer.hpp"
 #include "graphics/Color.hpp"
 #include "graphics/SpriteBatch.hpp"
 #include "input/TouchEvent.hpp"
@@ -35,12 +31,10 @@ void SalonPlayState::onEnter(core::Engine &engine) {
   this->context_ = &engine.salon();
 
   this->assets_.load(engine.assets());
+  this->manager_.reset();
 
-  this->sessionServed_ = 0;
-  this->sessionLost_ = 0;
   this->sessionMoneyBefore_ = this->context_->money();
   this->sessionReputationBefore_ = this->context_->reputation();
-  this->timeUntilNextSpawn_ = kFirstSpawnDelaySeconds;
 
   const math::Rect closeBounds{
       kDesignWidth - 240.0f - 24.0f,
@@ -58,11 +52,8 @@ void SalonPlayState::onEnter(core::Engine &engine) {
   this->particles_.clear();
 
   this->engine_->audio().setAmbient(true);
-
-  this->tutorialActive_ =
-      !this->context_->tutorialSeen() && this->context_->day() == 1;
-  this->tutorialStage_ = 0;
-  this->tutorialTimer_ = 0.0f;
+  this->tutorial_.begin(!this->context_->tutorialSeen() &&
+                        this->context_->day() == 1);
 
   SAL_LOGI("Salon: enter (day %d, money $%d, rep %d)", this->context_->day(),
            this->context_->money(), this->context_->reputation());
@@ -73,7 +64,7 @@ void SalonPlayState::onExit() {
     this->engine_->audio().setAmbient(false);
   this->context_->layout().resetOccupantId();
   this->assets_.unload();
-  this->customers_.clear();
+  this->manager_.reset();
   this->particles_.clear();
   this->closeButton_.reset();
   this->toast_.reset();
@@ -82,55 +73,67 @@ void SalonPlayState::onExit() {
 }
 
 void SalonPlayState::update(float deltaSeconds) {
-  this->elapsed_ += deltaSeconds;
-
-  this->spawnTick(deltaSeconds);
-  this->updateTutorial(deltaSeconds);
+  this->manager_.update(deltaSeconds, *this->context_, this->events_);
+  this->consumeEvents();
+  this->tutorial_.update(deltaSeconds, *this->toast_);
 
   this->closeButton_->update(deltaSeconds);
   this->toast_->update(deltaSeconds);
   this->particles_.update(deltaSeconds);
 
-  for (auto &customer : this->customers_) {
-    customer.update(deltaSeconds);
-  }
-
-  for (auto &customer : this->customers_) {
-    this->applyCustomerTransition(customer);
-  }
-
-  this->removeGoneCustomers();
-
 #ifndef NDEBUG
   this->debugLogTimer_ += deltaSeconds;
   if (this->debugLogTimer_ >= 2.0f) {
     this->debugLogTimer_ = 0.0f;
-    SAL_LOGD("Diff: score=%u spawn=%.2fs patMult=%.2f rep=%d",
-             this->sessionServed_, this->timeUntilNextSpawn_,
-             DifficultyCurve::patienceMultiplier(sessionServed_),
+    SAL_LOGD("Diff: score=%u patMult=%.2f rep=%d", this->manager_.served(),
+             DifficultyCurve::patienceMultiplier(this->manager_.served()),
              this->context_->reputation());
   }
 #endif // !NDEBUG
 }
 
+void SalonPlayState::consumeEvents() {
+  if (this->events_.spawnRejected) {
+    this->toast_->setKind(ui::ToastKind::Warning)
+        .setTitle("Warning!")
+        .show("No free wait slot");
+  }
+  if (this->events_.spawned > 0 && this->engine_ != nullptr) {
+    this->engine_->audio().play(audio::Sfx::Doorbell);
+  }
+  for (const math::Vec2 &pos : this->events_.completedAt) {
+    // Service complete
+    this->particles_.spawn(pos, fx::ParticleKind::Heart, 8);
+    this->particles_.spawn(pos, fx::ParticleKind::Dust, 6);
+  }
+  for (const math::Vec2 &pos : this->events_.servedAt) {
+    // Payment: coin burst, bright pulse, completion chime.
+    this->particles_.spawn(pos, fx::ParticleKind::Coin, 14);
+    if (this->engine_ != nullptr) {
+      this->engine_->addFlash(graphics::Color{1.0f, 0.9f, 0.45f, 0.35f}, 0.4f);
+      this->engine_->audio().play(audio::Sfx::Served);
+    }
+    if (this->tutorial_.onFirstPayment(*this->toast_))
+      this->completeTutorial();
+  }
+  if (this->events_.gaveUp > 0 && this->engine_ != nullptr) {
+    // Customer lost: subtle shake + red edge pulse.
+    this->engine_->addShake(0.35f, 10.0f);
+    this->engine_->addFlash(graphics::Color{0.9f, 0.2f, 0.2f, 0.25f}, 0.35f);
+  }
+}
+
 void SalonPlayState::render(graphics::SpriteBatch &batch) {
   this->renderer_.setBatch(&batch);
 
-  // Flat salon floor
-  this->renderer_.drawRect(
-      {0.0f, 0.0f, core::kDesignWidth, core::kDesignHeight},
-      graphics::Color{0.18f, 0.13f, 0.10f, 1.0f});
-
-  this->renderGrid();
-  this->renderStations();
-  this->renderDecor();
+  SalonRenderer::renderRoom(this->renderer_, *this->context_,
+                            /*showOccupants=*/true);
   this->renderCustomer();
+  this->particles_.render(batch);
   this->renderHud();
 #ifndef NDEBUG
   this->renderDebugOverlay();
 #endif // !NDEBUG
-
-  this->particles_.render(batch);
 
   this->closeButton_->render(this->renderer_);
 
@@ -139,113 +142,8 @@ void SalonPlayState::render(graphics::SpriteBatch &batch) {
                        ui::ToastAnchor::Center);
 }
 
-void SalonPlayState::renderGrid() {
-  using L = SalonLayout;
-
-  // Wall color as the background behind the grid.
-  const auto *wallArch = CosmeticCatalog::find(this->context_->currentWallId());
-  const graphics::Color wallColor =
-      wallArch ? wallArch->primary : graphics::Color{0.30f, 0.26f, 0.22f, 1.0f};
-  this->renderer_.drawRect({0.0f, 0.0f, kDesignWidth, kDesignHeight},
-                           wallColor);
-
-  // Floor colors.
-  const auto *floorArch =
-      CosmeticCatalog::find(this->context_->currentFloorId());
-  const graphics::Color tileA =
-      floorArch ? floorArch->primary
-                : graphics::Color{0.28f, 0.20f, 0.14f, 1.0f};
-  const graphics::Color tileB =
-      floorArch ? floorArch->secondary
-                : graphics::Color{0.32f, 0.23f, 0.16f, 1.0f};
-
-  const math::Rect floorRect{
-      L::kOriginX,
-      L::kOriginY,
-      L::kCols * L::kTileSize,
-      L::kRows * L::kTileSize,
-  };
-  this->renderer_.drawRect(floorRect, tileA);
-
-  const SalonLayout &layout = this->context_->layout();
-
-  for (int row = 0; row < L::kRows; ++row) {
-    for (int col = 0; col < L::kCols; ++col) {
-      const math::Rect cellRect{
-          L::kOriginX + col * L::kTileSize,
-          L::kOriginY + row * L::kTileSize,
-          L::kTileSize,
-          L::kTileSize,
-      };
-      const bool alternate = ((col + row) & 1) != 0;
-      const Cell &cell = layout.cellAt(col, row);
-
-      // Base tile: floor color for empty cells, cell type color otherwise.
-      const graphics::Color baseColor = cellColor(cell.type, alternate);
-      // const graphics::Color fill = (cell.type == CellType::Empty)
-      //                                  ? (alternate ? tileB : tileA)
-      //                                  : baseColor;
-      graphics::Color fill;
-      if (cell.type == CellType::Empty) {
-        fill = alternate ? tileB : tileA;
-      } else {
-        fill = cellColor(cell.type, alternate);
-      }
-      this->renderer_.drawRect(cellRect.inset(1.0f), fill);
-
-      if (cell.occupantId != 0) {
-        this->renderer_.drawRect(cellRect.inset(L::kTileSize * 0.35f),
-                                 graphics::Color{1.0f, 1.0f, 1.0f, 0.15f});
-      }
-    }
-  }
-}
-
-void SalonPlayState::renderStations() {
-  using L = SalonLayout;
-  const SalonLayout &layout = this->context_->layout();
-
-  for (const auto &inst : layout.stations()) {
-    const math::Rect cellRect{
-        L::kOriginX + inst.gridX * L::kTileSize,
-        L::kOriginY + inst.gridY * L::kTileSize,
-        L::kTileSize,
-        L::kTileSize,
-    };
-
-    const StationArchetype *arch = StationCatalog::find(inst.archetypeId);
-    const graphics::Color color =
-        arch ? arch->placeholderColor : graphics::Color{0.7f, 0.7f, 0.7f, 1.0f};
-
-    this->renderer_.drawRect(cellRect.inset(8.0f), color);
-    this->renderer_.drawFrame(cellRect.inset(8.0f),
-                              graphics::Color{1.0f, 1.0f, 1.0f, 0.30}, 2.0f);
-  }
-}
-
-void SalonPlayState::renderDecor() {
-  using L = SalonLayout;
-  for (const auto &d : this->context_->layout().decors()) {
-    const math::Rect cellRect{
-        L::kOriginX + d.gridX * L::kTileSize,
-        L::kOriginY + d.gridY * L::kTileSize,
-        L::kTileSize,
-        L::kTileSize,
-    };
-
-    const auto *arch = CosmeticCatalog::find(d.archetypeId);
-    const graphics::Color c =
-        arch ? arch->primary : graphics::Color{0.7f, 0.7f, 0.7f, 1.0f};
-
-    this->renderer_.drawRect(cellRect.inset(L::kTileSize * 0.20f), c);
-    this->renderer_.drawFrame(cellRect.inset(L::kTileSize * 0.20f),
-                              graphics::Color{1.0f, 1.0f, 1.0f, 0.25f}, 2.0f);
-  }
-}
-
 void SalonPlayState::renderCustomer() {
-  // Placeholder customer
-  for (const auto &customer : this->customers_) {
+  for (const auto &customer : this->manager_.customers()) {
     graphics::Color bodyColor{0.7f, 0.7f, 0.7f, 1.0f};
     if (const auto *arch = CustomerCatalog::find(customer.archetypeId())) {
       bodyColor = arch->placeholderColor;
@@ -261,7 +159,7 @@ void SalonPlayState::renderCustomer() {
     if (customer.currentState() == CustomerState::Queueing ||
         customer.currentState() == CustomerState::Seated) {
       const float phase = static_cast<float>(customer.id() % 7u) * 0.9f;
-      center.y += std::sin(this->elapsed_ * 2.2f + phase) * 3.0f;
+      center.y += std::sin(this->manager_.elapsed() * 2.2f + phase) * 3.0f;
     }
 
     const math::Rect rect =
@@ -338,18 +236,17 @@ void SalonPlayState::renderDebugOverlay() {
   // Small debug panel at the top-left of the grid area.
   const float x = 24.0f;
   const float y = 80.0f;
-  std::uniform_real_distribution<float> unit(0.0f, 1.0f);
 
   const std::string line1 =
-      "score=" + std::to_string(this->sessionServed_) +
-      "  spawn=" + std::to_string(this->timeUntilNextSpawn_) + "s";
+      "score=" + std::to_string(this->manager_.served()) +
+      "  customers=" + std::to_string(this->manager_.customers().size());
 
   const std::string line2 =
       "patMult=" +
-      std::to_string(
-          static_cast<int>(
-              DifficultyCurve::patienceMultiplier(this->sessionServed_) * 100) /
-          100.0f)
+      std::to_string(static_cast<int>(DifficultyCurve::patienceMultiplier(
+                                          this->manager_.served()) *
+                                      100) /
+                     100.0f)
           .substr(0, 4) +
       "  rep=" + std::to_string(this->context_->reputation());
 
@@ -377,296 +274,29 @@ void SalonPlayState::onTouch(const input::TouchEvent &event) {
   if (event.phase != input::TouchPhase::Down)
     return;
 
-  if (event.phase == input::TouchPhase::Down) {
-    Customer *hit = nullptr;
-    float bestDist = kCustomerHitRadius;
-
-    for (auto &customer : this->customers_) {
-      if (customer.currentState() != CustomerState::Queueing)
-        continue;
-
-      const float d = glm::distance(customer.currentPosition(), event.position);
-      if (d < bestDist) {
-        bestDist = d;
-        hit = &customer;
-      }
-    }
-    if (hit != nullptr) {
-      this->seatCustomer(*hit);
-    }
-  }
-}
-
-graphics::Color SalonPlayState::cellColor(CellType type, bool alternate) const {
-  switch (type) {
-  case CellType::Door:
-    return graphics::Color{0.45f, 0.25f, 0.15f, 1.0f};
-  case CellType::WaitSlot:
-    return graphics::Color{0.20f, 0.40f, 0.55f, 1.0f};
-  case CellType::Station:
-    return graphics::Color{0.40f, 0.28f, 0.42f, 1.0f};
-  case CellType::Empty:
-  default:
-    return alternate ? graphics::Color{0.21f, 0.17f, 0.24f, 1.0f}
-                     : graphics::Color{0.18f, 0.15f, 0.21f, 1.0f};
-  }
-}
-
-const graphics::Texture *SalonPlayState::cellTexture(CellType type) const {
-  switch (type) {
-  case CellType::Door:
-    return &this->assets_.door;
-  case CellType::WaitSlot:
-    return &this->assets_.chair;
-  case CellType::Station:
-    return nullptr;
-  case CellType::Empty:
-  default:
-    return &this->assets_.floor;
-  }
-}
-
-// Customer helpers
-void SalonPlayState::applyCustomerTransition(Customer &customer) {
-  using L = SalonLayout;
-  switch (customer.currentState()) {
-  case CustomerState::Arriving:
-    if (customer.hasArrived()) {
-      customer.setCurrentState(CustomerState::Queueing);
-    }
+  math::Vec2 seatPos{0.0f, 0.0f};
+  switch (this->manager_.trySeatAt(event.position, *this->context_, seatPos)) {
+  case SeatResult::Seated:
+    // Station use: dust puff at the station + tap confirmation.
+    this->particles_.spawn(seatPos, fx::ParticleKind::Dust, 10);
+    if (this->engine_ != nullptr)
+      this->engine_->audio().play(audio::Sfx::Tap);
+    this->tutorial_.onSeated(*this->toast_);
     break;
-
-  case CustomerState::Queueing:
-    if (customer.hasGivenUp()) {
-      this->freeCustomerCell(customer);
-      customer.setTargetPosition(
-          L::cellCenter(L::kDoorCell.col, L::kDoorCell.row));
-      customer.setCurrentState(CustomerState::Leaving);
-      customer.setOutcome(CustomerOutcome::GaveUp);
-    }
-    break;
-
-  case CustomerState::WalkingToSeat:
-    if (customer.hasArrived()) {
-      customer.setCurrentState(CustomerState::Seated);
-    }
-    break;
-
-  case CustomerState::Seated:
-    if (customer.hasSatLongEnough()) {
-      this->freeCustomerCell(customer);
-      customer.setTargetPosition(
-          L::cellCenter(L::kDoorCell.col, L::kDoorCell.row));
-      customer.setOutcome(CustomerOutcome::Served);
-      customer.setCurrentState(CustomerState::Leaving);
-      // Service complete: hearts for the happy customer + a small dust
-      // puff where the station was used.
-      this->particles_.spawn(customer.currentPosition(),
-                             fx::ParticleKind::Heart, 8);
-      this->particles_.spawn(customer.currentPosition(), fx::ParticleKind::Dust,
-                             6);
-    }
-    break;
-
-  case CustomerState::Leaving:
-    break;
-  }
-}
-
-void SalonPlayState::spawnTick(float deltaSeconds) {
-  this->timeUntilNextSpawn_ -= deltaSeconds;
-  if (timeUntilNextSpawn_ > 0.0f)
-    return;
-
-  const std::size_t before = this->customers_.size();
-  this->spawnCustomer();
-  if (this->customers_.size() == before)
-    return;
-
-  std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-  this->timeUntilNextSpawn_ = DifficultyCurve::jitteredSpawnInterval(
-      this->sessionServed_, this->context_->reputation(), unit(this->rng_));
-}
-
-void SalonPlayState::spawnCustomer() {
-  using namespace DifficultyCurve;
-
-  const int waitSlotIndex = this->findFreeWaitSlot();
-  if (waitSlotIndex < 0) {
-    SAL_LOGW("Salon: no free wait slot, spawn rejected");
-    this->toast_->setKind(ui::ToastKind::Warning)
-        .setTitle("Warning!")
-        .show("No free wait slot");
-    return;
-  }
-
-  const CustomerArchetype *arch = CustomerCatalog::pickForReputation(
-      this->context_->reputation(), this->rng_);
-  if (arch == nullptr)
-    return;
-
-  ++this->nextCustomerId_;
-
-  const float patience = kBasePatienceSeconds * arch->patienceMultiplier *
-                         patienceMultiplier(this->sessionServed_);
-
-  const math::Vec2 spawnPos = SalonLayout::cellCenter(
-      SalonLayout::kDoorCell.col, SalonLayout::kDoorCell.row);
-  const math::Vec2 waitPos = SalonLayout::cellCenterByIndex(waitSlotIndex);
-
-  Customer customer(this->nextCustomerId_, CustomerState::Arriving, spawnPos,
-                    arch->id, patience, arch->tipMultiplier);
-  customer.setTargetPosition(waitPos);
-  customer.setReserveCellIndex(waitSlotIndex);
-
-  this->reserveCell(waitSlotIndex, customer.id());
-  this->customers_.push_back(customer);
-
-  if (this->engine_ != nullptr)
-    this->engine_->audio().play(audio::Sfx::Doorbell);
-
-  SAL_LOGI("Salon: spawning customer %u", this->nextCustomerId_);
-}
-
-bool SalonPlayState::seatCustomer(Customer &customer) {
-  const int stationIndex = this->findFreeStation();
-  if (stationIndex < 0) {
-    SAL_LOGW("Salon: no free chair for customer: %u", customer.id());
+  case SeatResult::NoStation:
     this->toast_->setKind(ui::ToastKind::Warning)
         .setTitle("No free station!")
         .show("Buy more stations in build mode");
-    return false;
-  }
-
-  this->freeCustomerCell(customer);
-  this->reserveCell(stationIndex, customer.id());
-
-  customer.setReserveCellIndex(stationIndex);
-  customer.setTargetPosition(SalonLayout::cellCenterByIndex(stationIndex));
-  customer.setCurrentState(CustomerState::WalkingToSeat);
-
-  this->particles_.spawn(SalonLayout::cellCenterByIndex(stationIndex),
-                         fx::ParticleKind::Dust, 10);
-  if (this->engine_ != nullptr)
-    this->engine_->audio().play(audio::Sfx::Tap);
-  if (this->tutorialActive_ && this->tutorialStage_ == 1) {
-    this->toast_->setKind(ui::ToastKind::Info)
-        .setTitle("Seated!")
-        .show("Service takes a moment — watch for coins");
-    this->tutorialStage_ = 2;
-  }
-
-  SAL_LOGI("Salon: customer %u -> station %d", customer.id(), stationIndex);
-  return true;
-}
-
-void SalonPlayState::removeGoneCustomers() {
-  auto it = this->customers_.begin();
-  while (it != this->customers_.end()) {
-    if (it->currentState() == CustomerState::Leaving && it->hasArrived()) {
-      this->freeCustomerCell(*it);
-      switch (it->outcome()) {
-      case CustomerOutcome::Served: {
-        const int32_t payout = static_cast<int32_t>(
-            DifficultyCurve::kBasePayout * it->tipMultiplier());
-        this->context_->onCustomerServed(payout);
-        ++this->sessionServed_;
-        this->particles_.spawn(it->currentPosition(), fx::ParticleKind::Coin,
-                               14);
-        if (this->engine_ != nullptr) {
-          this->engine_->addFlash(graphics::Color{1.0f, 0.9f, 0.45f, 0.35f},
-                                  0.4f);
-          this->engine_->audio().play(audio::Sfx::Served);
-        }
-        if (this->tutorialActive_ && this->tutorialStage_ == 2) {
-          this->toast_->setKind(ui::ToastKind::Success)
-              .setTitle("Payment collected!")
-              .show("Coins earn money, happy customers earn reputation");
-          this->tutorialStage_ = 3;
-          this->markTutorialSeen();
-        }
-        break;
-      }
-      case CustomerOutcome::GaveUp:
-        ++this->sessionLost_;
-        this->context_->onCustomerLost();
-        if (this->engine_ != nullptr) {
-          this->engine_->addShake(0.35f, 10.0f);
-          this->engine_->addFlash(graphics::Color{0.9f, 0.2f, 0.2f, 0.25f},
-                                  0.35f);
-        }
-        break;
-      }
-      it = this->customers_.erase(it);
-    } else {
-      ++it;
-    }
+    break;
+  case SeatResult::NoCustomer:
+    break;
   }
 }
 
-// Reservation helpers
-int SalonPlayState::findFreeWaitSlot() const {
-  using L = SalonLayout;
-  const SalonLayout &layout = this->context_->layout();
-  for (const auto &w : L::kWaitSlots) {
-    if (layout.cellAt(w.col, w.row).occupantId == 0) {
-      return L::cellIndex(w.col, w.row);
-    }
-  }
-  return -1;
-}
-
-int SalonPlayState::findFreeStation() const {
-  using L = SalonLayout;
-  const SalonLayout &layout = this->context_->layout();
-  for (const auto &s : layout.stations()) {
-    if (layout.cellAt(s.gridX, s.gridY).occupantId == 0) {
-      return L::cellIndex(s.gridX, s.gridY);
-    }
-  }
-  return -1;
-}
-
-void SalonPlayState::reserveCell(int index, uint32_t customerId) {
-  if (index < 0)
+void SalonPlayState::completeTutorial() {
+  if (!this->tutorial_.active())
     return;
-  this->context_->layout()
-      .cellAt(index % SalonLayout::kCols, index / SalonLayout::kCols)
-      .occupantId = customerId;
-}
-
-void SalonPlayState::freeCell(int index) {
-  if (index < 0)
-    return;
-  this->context_->layout()
-      .cellAt(index % SalonLayout::kCols, index / SalonLayout::kCols)
-      .occupantId = 0;
-}
-
-void SalonPlayState::freeCustomerCell(Customer &customer) {
-  if (customer.reservedCellIndex() < 0)
-    return;
-  this->freeCell(customer.reservedCellIndex());
-  customer.setReserveCellIndex(-1);
-}
-
-void SalonPlayState::updateTutorial(float deltaSeconds) {
-  if (!this->tutorialActive_)
-    return;
-  this->tutorialTimer_ += deltaSeconds;
-  if (this->tutorialStage_ == 0 && this->tutorialTimer_ > 0.8f) {
-    this->toast_->setKind(ui::ToastKind::Info)
-        .setTitle("Welcome!")
-        .show("Tap a waiting customer to seat them");
-    this->tutorialStage_ = 1;
-  }
-}
-
-void SalonPlayState::markTutorialSeen() {
-  if (!this->tutorialActive_)
-    return;
-  this->tutorialActive_ = false;
-  this->tutorialStage_ = 3;
+  this->tutorial_.finish();
   if (this->context_ != nullptr) {
     this->context_->markTutorialSeen();
     if (this->engine_ != nullptr)
@@ -677,7 +307,7 @@ void SalonPlayState::markTutorialSeen() {
 void SalonPlayState::onClosePressed() {
   if (this->engine_ != nullptr)
     this->engine_->audio().play(audio::Sfx::Tap);
-  this->markTutorialSeen();
+  this->completeTutorial();
 
   SessionResult result{
       .day = this->context_->day(),
@@ -685,14 +315,14 @@ void SalonPlayState::onClosePressed() {
       .moneyAfter = this->context_->money(),
       .reputationBefore = this->sessionReputationBefore_,
       .reputationAfter = this->context_->reputation(),
-      .customersServed = this->sessionServed_,
-      .customersLost = this->sessionLost_,
+      .customersServed = this->manager_.served(),
+      .customersLost = this->manager_.lost(),
   };
 
   SAL_LOGI("Salon: closing day %d (served %u, lost %u)", result.day,
            result.customersServed, result.customersLost);
 
-  this->context_->recordDayResult(this->sessionServed_);
+  this->context_->recordDayResult(this->manager_.served());
   this->context_->advanceDay();
   result.newlyUnlocked = CosmeticUnlocks::checkAndApply(*this->context_);
   this->engine_->saveProfile();

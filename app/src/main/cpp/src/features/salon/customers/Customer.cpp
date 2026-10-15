@@ -1,4 +1,4 @@
-#include "features/salon/Customer.hpp"
+#include "features/salon/customers/Customer.hpp"
 
 #include <algorithm>
 #include <glm/geometric.hpp>
