@@ -9,6 +9,7 @@
 #include "core/GameConfig.hpp"
 #include "core/Log.hpp"
 #include "features/Feature.hpp"
+#include "features/salon/CosmeticUnlocks.hpp"
 #include "features/salon/Customer.hpp"
 #include "features/salon/CustomerCatalog.hpp"
 #include "features/salon/DifficultyCurve.hpp"
@@ -104,6 +105,8 @@ void SalonPlayState::render(graphics::SpriteBatch &batch) {
       graphics::Color{0.18f, 0.13f, 0.10f, 1.0f});
 
   this->renderGrid();
+  this->renderStations();
+  this->renderDecor();
   this->renderCustomer();
   this->renderHud();
 #ifndef NDEBUG
@@ -120,19 +123,33 @@ void SalonPlayState::render(graphics::SpriteBatch &batch) {
 void SalonPlayState::renderGrid() {
   using L = SalonLayout;
 
-  // Floor background under the tiles
+  // Wall color as the background behind the grid.
+  const auto *wallArch = CosmeticCatalog::find(this->context_->currentWallId());
+  const graphics::Color wallColor =
+      wallArch ? wallArch->primary : graphics::Color{0.30f, 0.26f, 0.22f, 1.0f};
+  this->renderer_.drawRect({0.0f, 0.0f, kDesignWidth, kDesignHeight},
+                           wallColor);
+
+  // Floor colors.
+  const auto *floorArch =
+      CosmeticCatalog::find(this->context_->currentFloorId());
+  const graphics::Color tileA =
+      floorArch ? floorArch->primary
+                : graphics::Color{0.28f, 0.20f, 0.14f, 1.0f};
+  const graphics::Color tileB =
+      floorArch ? floorArch->secondary
+                : graphics::Color{0.32f, 0.23f, 0.16f, 1.0f};
+
   const math::Rect floorRect{
       L::kOriginX,
       L::kOriginY,
       L::kCols * L::kTileSize,
       L::kRows * L::kTileSize,
   };
-  this->renderer_.drawRect(floorRect,
-                           graphics::Color{0.16f, 0.13f, 0.18f, 1.0f});
+  this->renderer_.drawRect(floorRect, tileA);
 
   const SalonLayout &layout = this->context_->layout();
 
-  // Checkerboard tiles
   for (int row = 0; row < L::kRows; ++row) {
     for (int col = 0; col < L::kCols; ++col) {
       const math::Rect cellRect{
@@ -141,32 +158,69 @@ void SalonPlayState::renderGrid() {
           L::kTileSize,
           L::kTileSize,
       };
-
       const bool alternate = ((col + row) & 1) != 0;
       const Cell &cell = layout.cellAt(col, row);
 
-      const auto *station = layout.stationAt(col, row);
-      if (station != nullptr) {
-        const auto *archetype = StationCatalog::find(station->archetypeId);
-        const graphics::Color color = (archetype != nullptr)
-                                          ? archetype->placeholderColor
-                                          : cellColor(cell.type, alternate);
-        this->renderer_.drawRect(cellRect.inset(1.0f), color);
+      // Base tile: floor color for empty cells, cell type color otherwise.
+      const graphics::Color baseColor = cellColor(cell.type, alternate);
+      // const graphics::Color fill = (cell.type == CellType::Empty)
+      //                                  ? (alternate ? tileB : tileA)
+      //                                  : baseColor;
+      graphics::Color fill;
+      if (cell.type == CellType::Empty) {
+        fill = alternate ? tileB : tileA;
       } else {
-        if (const auto *tex = this->cellTexture(cell.type)) {
-          this->renderer_.batch()->draw(*tex, cellRect.inset(1.0f));
-        } else {
-          this->renderer_.drawRect(cellRect.inset(1.0f),
-                                   cellColor(cell.type, alternate));
-        }
+        fill = cellColor(cell.type, alternate);
       }
+      this->renderer_.drawRect(cellRect.inset(1.0f), fill);
 
       if (cell.occupantId != 0) {
-        // @NOTE: fade marker on reserved cells. Remove when customer sprites
         this->renderer_.drawRect(cellRect.inset(L::kTileSize * 0.35f),
                                  graphics::Color{1.0f, 1.0f, 1.0f, 0.15f});
       }
     }
+  }
+}
+
+void SalonPlayState::renderStations() {
+  using L = SalonLayout;
+  const SalonLayout &layout = this->context_->layout();
+
+  for (const auto &inst : layout.stations()) {
+    const math::Rect cellRect{
+        L::kOriginX + inst.gridX * L::kTileSize,
+        L::kOriginY + inst.gridY * L::kTileSize,
+        L::kTileSize,
+        L::kTileSize,
+    };
+
+    const StationArchetype *arch = StationCatalog::find(inst.archetypeId);
+    const graphics::Color color =
+        arch ? arch->placeholderColor : graphics::Color{0.7f, 0.7f, 0.7f, 1.0f};
+
+    this->renderer_.drawRect(cellRect.inset(8.0f), color);
+    this->renderer_.drawFrame(cellRect.inset(8.0f),
+                              graphics::Color{1.0f, 1.0f, 1.0f, 0.30}, 2.0f);
+  }
+}
+
+void SalonPlayState::renderDecor() {
+  using L = SalonLayout;
+  for (const auto &d : this->context_->layout().decors()) {
+    const math::Rect cellRect{
+        L::kOriginX + d.gridX * L::kTileSize,
+        L::kOriginY + d.gridY * L::kTileSize,
+        L::kTileSize,
+        L::kTileSize,
+    };
+
+    const auto *arch = CosmeticCatalog::find(d.archetypeId);
+    const graphics::Color c =
+        arch ? arch->primary : graphics::Color{0.7f, 0.7f, 0.7f, 1.0f};
+
+    this->renderer_.drawRect(cellRect.inset(L::kTileSize * 0.20f), c);
+    this->renderer_.drawFrame(cellRect.inset(L::kTileSize * 0.20f),
+                              graphics::Color{1.0f, 1.0f, 1.0f, 0.25f}, 2.0f);
   }
 }
 
@@ -547,6 +601,7 @@ void SalonPlayState::onClosePressed() {
 
   this->context_->recordDayResult(this->sessionServed_);
   this->context_->advanceDay();
+  result.newlyUnlocked = CosmeticUnlocks::checkAndApply(*this->context_);
   this->engine_->saveProfile();
 
   goTo<SessionSummaryState>(*this->engine_, result);

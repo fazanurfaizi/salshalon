@@ -73,6 +73,13 @@ public:
   /// (caller is expected to handle refunds). Cell becomes Empty.
   std::optional<StationInstance> removeStationAt(int col, int row);
 
+  // Decors
+  const std::vector<DecorInstance> &decors() const { return this->decors_; }
+  const DecorInstance *decorAt(int col, int row) const;
+  bool canPlaceDecor(int col, int row) const;
+  bool placeDecor(const DecorInstance &inst);
+  std::optional<DecorInstance> removeDecorAt(int col, int row);
+
   /// Resets the layout to its starting configuration: door, wait slots, and
   /// a single cutting chair so the first session is playable.
   void reset();
@@ -82,6 +89,7 @@ public:
 private:
   std::array<Cell, kCols * kRows> grid_{};
   std::vector<StationInstance> stations_{};
+  std::vector<DecorInstance> decors_{};
 
   void rebuildCells();
 };

@@ -13,6 +13,12 @@ struct StationInstance {
   int gridY = 0;
 };
 
+struct DecorInstance {
+  std::string archetypeId;
+  int gridX = 0;
+  int gridY = 0;
+};
+
 /// Static description of a station kind. Loaded from StationCatalog.
 struct StationArchetype {
   std::string id;

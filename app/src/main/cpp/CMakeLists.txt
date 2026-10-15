@@ -75,6 +75,8 @@ add_library(salshalon SHARED
     src/features/salon/SaveSystem.cpp
     src/features/salon/CustomerCatalog.cpp
     src/features/salon/DifficultyCurve.cpp
+    src/features/salon/CosmeticCatalog.cpp
+    src/features/salon/CosmeticUnlocks.cpp
 
     src/features/settings/SettingsState.cpp
 )

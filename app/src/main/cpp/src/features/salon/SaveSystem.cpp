@@ -42,12 +42,30 @@ void serializeProfile(std::ostream &os, const SalonProfile &p) {
   write_binary(os, p.totalCustomersServed);
   write_binary(os, p.bestDayCustomers);
 
-  const uint32_t count = static_cast<uint32_t>(p.stations.size());
-  write_binary(os, count);
+  const uint32_t stationCount = static_cast<uint32_t>(p.stations.size());
+  write_binary(os, stationCount);
   for (const auto &s : p.stations) {
     write_string(os, s.archetypeId);
     write_binary(os, static_cast<int32_t>(s.gridX));
     write_binary(os, static_cast<int32_t>(s.gridY));
+  }
+
+  write_string(os, p.floorId);
+  write_string(os, p.wallId);
+
+  const uint32_t unlockCount =
+      static_cast<uint32_t>(p.unlockedCosmeticIds.size());
+  write_binary(os, unlockCount);
+  for (const auto &u : p.unlockedCosmeticIds) {
+    write_string(os, u);
+  }
+
+  const uint32_t decorCount = static_cast<uint32_t>(p.decors.size());
+  write_binary(os, decorCount);
+  for (const auto &d : p.decors) {
+    write_string(os, d.archetypeId);
+    write_binary(os, static_cast<int32_t>(d.gridX));
+    write_binary(os, static_cast<int32_t>(d.gridY));
   }
 }
 
@@ -92,6 +110,40 @@ std::optional<SalonProfile> deserializeProfile(std::istream &ifs) {
       continue;
     }
     p.stations.push_back(std::move(s));
+  }
+
+  p.floorId = read_string(ifs);
+  p.wallId = read_string(ifs);
+
+  uint32_t unlockCount = 0;
+  if (!read_binary(ifs, unlockCount))
+    return std::nullopt;
+  if (unlockCount > 1024u)
+    return std::nullopt;
+  p.unlockedCosmeticIds.reserve(unlockCount);
+  for (uint32_t i = 0; i < unlockCount; ++i) {
+    auto id = read_string(ifs);
+    if (!id.empty())
+      p.unlockedCosmeticIds.push_back(std::move(id));
+  }
+
+  uint32_t decorCount = 0;
+  if (!read_binary(ifs, decorCount))
+    return std::nullopt;
+  if (decorCount > kMaxStations)
+    return std::nullopt;
+  p.decors.reserve(decorCount);
+  for (uint32_t i = 0; i < decorCount; ++i) {
+    DecorInstance d;
+    d.archetypeId = read_string(ifs);
+    int32_t gx = 0, gy = 0;
+    if (!read_binary(ifs, gx) || !read_binary(ifs, gy))
+      return std::nullopt;
+    d.gridX = gx;
+    d.gridY = gy;
+    if (d.archetypeId.empty() || d.gridX < 0 || d.gridY < 0)
+      continue;
+    p.decors.push_back(std::move(d));
   }
 
   if (!ifs)

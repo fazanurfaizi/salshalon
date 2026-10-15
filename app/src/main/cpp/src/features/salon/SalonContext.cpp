@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "core/Log.hpp"
+#include "features/salon/CosmeticCatalog.hpp"
 
 namespace salshalon::features::salon {
 
@@ -62,6 +63,43 @@ void SalonContext::recordDayResult(uint32_t served) {
   }
 }
 
+bool SalonContext::isCosmeticUnlocked(const std::string &id) const {
+  if (const auto *arch = CosmeticCatalog::find(id)) {
+    if (arch->unlock.type == UnlockCondition::Type::Always)
+      return true;
+  }
+  for (const auto &u : this->unlockedCosmeticIds_) {
+    if (u == id)
+      return true;
+  }
+  return false;
+}
+
+bool SalonContext::unlockCosmetic(const std::string &id) {
+  if (isCosmeticUnlocked(id))
+    return false;
+  this->unlockedCosmeticIds_.push_back(id);
+  return true;
+}
+
+void SalonContext::setCurrentFloor(const std::string &id) {
+  if (!isCosmeticUnlocked(id))
+    return;
+  const auto *arch = CosmeticCatalog::find(id);
+  if (arch == nullptr || arch->kind != CosmeticKind::Floor)
+    return;
+  this->floorId_ = id;
+}
+
+void SalonContext::setCurrentWall(const std::string &id) {
+  if (!isCosmeticUnlocked(id))
+    return;
+  const auto *arch = CosmeticCatalog::find(id);
+  if (arch == nullptr || arch->kind != CosmeticKind::Wall)
+    return;
+  this->wallId_ = id;
+}
+
 SalonProfile SalonContext::toProfile() const {
   SalonProfile p;
   p.version = SalonProfile::kCurrentVersion;
@@ -71,6 +109,10 @@ SalonProfile SalonContext::toProfile() const {
   p.totalCustomersServed = totalCustomersServed_;
   p.bestDayCustomers = bestDayCustomers_;
   p.stations = layout_.stations();
+  p.decors = layout_.decors();
+  p.floorId = floorId_;
+  p.wallId = wallId_;
+  p.unlockedCosmeticIds = unlockedCosmeticIds_;
   return p;
 }
 
@@ -81,19 +123,26 @@ void SalonContext::applyProfile(const SalonProfile &profile) {
   totalCustomersServed_ = profile.totalCustomersServed;
   bestDayCustomers_ = profile.bestDayCustomers;
 
+  floorId_ = profile.floorId.empty() ? "floor_wood" : profile.floorId;
+  wallId_ = profile.wallId.empty() ? "wall_cream" : profile.wallId;
+  unlockedCosmeticIds_ = profile.unlockedCosmeticIds;
+
   layout_.reset();
-  if (!profile.stations.empty()) {
-    while (!layout_.stations().empty()) {
-      const auto &s = layout_.stations().front();
-      layout_.removeStationAt(s.gridX, s.gridY);
-    }
-    for (const auto &s : profile.stations) {
-      layout_.placeStation(s);
-    }
+  while (!layout_.stations().empty()) {
+    const auto &s = layout_.stations().front();
+    layout_.removeStationAt(s.gridX, s.gridY);
+  }
+  for (const auto &s : profile.stations) {
+    layout_.placeStation(s);
+  }
+  for (const auto &d : profile.decors) {
+    layout_.placeDecor(d);
   }
 
-  SAL_LOGI("SalonContext: applied profile — $%d, rep %d, day %d, %zu stations",
-           money_, reputation_, day_, layout_.stations().size());
+  SAL_LOGI("SalonContext: profile applied — $%d, rep %d, day %d, "
+           "%zu stations, %zu decors, floor=%s wall=%s",
+           money_, reputation_, day_, layout_.stations().size(),
+           layout_.decors().size(), floorId_.c_str(), wallId_.c_str());
 }
 
 } // namespace salshalon::features::salon

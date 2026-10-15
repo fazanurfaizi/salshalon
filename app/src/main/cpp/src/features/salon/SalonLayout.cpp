@@ -1,4 +1,5 @@
 #include "features/salon/SalonLayout.hpp"
+#include "features/salon/Station.hpp"
 
 namespace salshalon::features::salon {
 
@@ -21,6 +22,7 @@ bool SalonLayout::cellFromWorld(const math::Vec2 &p, int &outCol, int &outRow) {
   return true;
 }
 
+// Stations
 const StationInstance *SalonLayout::stationAt(int col, int row) const {
   for (const auto &s : this->stations_) {
     if (s.gridX == col && s.gridY == row)
@@ -63,6 +65,48 @@ std::optional<StationInstance> SalonLayout::removeStationAt(int col, int row) {
   return std::nullopt;
 }
 
+// Decors
+const DecorInstance *SalonLayout::decorAt(int col, int row) const {
+  for (const auto &d : this->decors_) {
+    if (d.gridX == col && d.gridY == row)
+      return &d;
+  }
+  return nullptr;
+}
+
+bool SalonLayout::canPlaceDecor(int col, int row) const {
+  if (!inBounds(col, row))
+    return false;
+  const Cell &c = cellAt(col, row);
+  if (c.type == CellType::Door)
+    return false;
+  if (c.type == CellType::WaitSlot)
+    return false;
+  if (c.type == CellType::Station)
+    return false;
+  if (decorAt(col, row) != nullptr)
+    return false;
+  return true;
+}
+
+bool SalonLayout::placeDecor(const DecorInstance &inst) {
+  if (!this->canPlaceDecor(inst.gridX, inst.gridY))
+    return false;
+  this->decors_.push_back(inst);
+  return true;
+}
+
+std::optional<DecorInstance> SalonLayout::removeDecorAt(int col, int row) {
+  for (auto it = this->decors_.begin(); it != this->decors_.end(); ++it) {
+    if (it->gridX == col && it->gridY == row) {
+      DecorInstance removed = *it;
+      this->decors_.erase(it);
+      return removed;
+    }
+  }
+  return std::nullopt;
+}
+
 void SalonLayout::resetOccupantId() {
   for (auto &c : this->grid_) {
     c.occupantId = 0;
@@ -75,6 +119,7 @@ void SalonLayout::reset() {
     c.type = CellType::Empty;
   }
   this->stations_.clear();
+  this->decors_.clear();
 
   StationInstance starter;
   starter.archetypeId = "cutting_chair";

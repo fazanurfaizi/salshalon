@@ -1,5 +1,6 @@
 #pragma once
 
+#include "features/salon/CosmeticCatalog.hpp"
 #include "features/salon/Customer.hpp"
 #include "features/salon/SalonAssets.hpp"
 #include "features/salon/SalonContext.hpp"
@@ -84,6 +85,8 @@ private:
 
   // Rendering
   void renderGrid();
+  void renderDecor();
+  void renderStations();
   void renderHud();
   void renderCustomer();
   void renderPatienceBar(const Customer &customer);

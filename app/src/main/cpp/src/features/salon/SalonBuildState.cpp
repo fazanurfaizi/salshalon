@@ -14,34 +14,39 @@ namespace salshalon::features::salon {
 using core::kDesignHeight;
 using core::kDesignWidth;
 
+namespace {
+constexpr int kCategoryCount = 4;
+}
+
 void SalonBuildState::onEnter(core::Engine &engine) {
   game::GameState::onEnter(engine);
   this->context_ = &engine.salon();
 
   const math::Rect openRect{
-      kDesignWidth - kOpenSalonWidth,
+      kDesignWidth - kSideButtonMargin - kSideButtonWidth,
       kSideButtonY,
-      kOpenSalonWidth,
-      kOpenSalonHeight,
+      kSideButtonWidth,
+      kSideButtonHeight,
   };
-  this->openSalonButton_ = std::make_unique<ui::Button>(
-      "OPEN SALON", openRect, [this] { this->onOpenSalonPressed(); });
-  this->openSalonButton_->setTextScale(3.0f);
+  openSalonButton_ = std::make_unique<ui::Button>(
+      "OPEN SALON", openRect, [this] { onOpenSalonPressed(); });
+  openSalonButton_->setTextScale(3.0f);
 
   const math::Rect menuRect{
-      0.0f,
+      kSideButtonMargin,
       kSideButtonY,
-      kOpenSalonWidth,
-      kOpenSalonHeight,
+      kSideButtonWidth,
+      kSideButtonHeight,
   };
-  this->menuButton_ = std::make_unique<ui::Button>(
-      "MENU", menuRect, [this] { this->onMenuPressed(); });
-  this->menuButton_->setTextScale(3.0f);
+  menuButton_ = std::make_unique<ui::Button>("MENU", menuRect,
+                                             [this] { onMenuPressed(); });
+  menuButton_->setTextScale(3.0f);
 
-  this->toast_.setKind(ui::ToastKind::Info).setFadeTime(1.5f);
+  toast_.setKind(ui::ToastKind::Info).setFadeTime(1.5f);
 
-  SAL_LOGI("Build: enter (money $%d, stations %zu)", this->context_->money(),
-           this->context_->layout().stations().size());
+  SAL_LOGI("Build: enter (money $%d, stations %zu, decor %zu)",
+           context_->money(), context_->layout().stations().size(),
+           context_->layout().decors().size());
 }
 
 void SalonBuildState::onExit() {
@@ -61,12 +66,18 @@ void SalonBuildState::update(float deltaSeconds) {
 void SalonBuildState::render(graphics::SpriteBatch &batch) {
   this->renderer_.setBatch(&batch);
 
+  // Wall background
+  const auto *wallArch = CosmeticCatalog::find(this->context_->currentWallId());
+  const graphics::Color wallColor =
+      wallArch ? wallArch->primary : graphics::Color{0.30f, 0.26f, 0.22f, 1.0f};
   this->renderer_.drawRect({0.0f, 0.0f, kDesignWidth, kDesignHeight},
-                           graphics::Color{0.10f, 0.11f, 0.14f, 1.0f});
+                           wallColor);
 
   this->renderGrid();
   this->renderStations();
+  this->renderDecor();
   this->renderHud();
+  this->renderTabs();
   this->renderItemStrip();
 
   this->openSalonButton_->render(this->renderer_);
@@ -80,6 +91,15 @@ void SalonBuildState::render(graphics::SpriteBatch &batch) {
 
 void SalonBuildState::renderGrid() {
   using L = SalonLayout;
+
+  const auto *floorArch =
+      CosmeticCatalog::find(this->context_->currentFloorId());
+  const graphics::Color tileA =
+      floorArch ? floorArch->primary
+                : graphics::Color{0.20f, 0.20f, 0.14f, 1.0f};
+  const graphics::Color tileB =
+      floorArch ? floorArch->secondary
+                : graphics::Color{0.32f, 0.23f, 0.16f, 1.0f};
 
   // Floor background under the tiles
   const math::Rect floorRect{
@@ -105,8 +125,14 @@ void SalonBuildState::renderGrid() {
 
       const bool alternate = ((col + row) & 1) != 0;
       const Cell &cell = layout.cellAt(col, row);
-      this->renderer_.drawRect(cellRect.inset(1.0f),
-                               cellColor(cell.type, alternate));
+
+      graphics::Color fill;
+      if (cell.type == CellType::Empty) {
+        fill = alternate ? tileB : tileA;
+      } else {
+        fill = cellColor(cell.type, alternate);
+      }
+      this->renderer_.drawRect(cellRect.inset(1.0f), fill);
     }
   }
 }
@@ -134,27 +160,64 @@ void SalonBuildState::renderStations() {
 }
 
 void SalonBuildState::renderHud() {
-  this->renderer_.drawRect({0.0f, 0.0f, kDesignWidth, kHudTopHeight},
-                           graphics::Color{0.04f, 0.04f, 0.07f, 1.0f});
+  renderer_.drawRect({0.0f, 0.0f, kDesignWidth, kHudTopHeight},
+                     graphics::Color{0.04f, 0.04f, 0.07f, 1.0f});
 
-  this->renderer_.drawText(
-      "BUILD - DAY " + std::to_string(this->context_->day()),
-      {24.0f, kHudTopHeight * 0.5f - 12.0f}, 2.5f, graphics::kWhite);
+  renderer_.drawText("BUILD - DAY " + std::to_string(context_->day()),
+                     {24.0f, kHudTopHeight * 0.5f - 12.0f}, 2.5f,
+                     graphics::kWhite);
 
-  const std::string moneyStr = "$" + std::to_string(this->context_->money());
-  const float moneyWidth = this->renderer_.measureText(moneyStr, 2.5f);
-  this->renderer_.drawText(
+  const std::string moneyStr = "$" + std::to_string(context_->money());
+  const float moneyWidth = renderer_.measureText(moneyStr, 2.5f);
+  renderer_.drawText(
       moneyStr,
       {kDesignWidth - 24.0f - moneyWidth, kHudTopHeight * 0.5f - 12.0f}, 2.5f,
       graphics::Color{0.85f, 1.0f, 0.75f, 1.0f});
 
-  // Bottom strip
-  this->renderer_.drawRect(
+  renderer_.drawRect(
       {0.0f, kDesignHeight - kHudBottomHeight, kDesignWidth, kHudBottomHeight},
       graphics::Color{0.04f, 0.04f, 0.07f, 1.0f});
 }
 
+void SalonBuildState::renderTabs() {
+  static const char *kLabels[kCategoryCount] = {"STATIONS", "FLOORS", "WALLS",
+                                                "DECOR"};
+
+  for (int i = 0; i < kCategoryCount; ++i) {
+    const math::Rect r = this->tabRect(i);
+    const bool selected = (static_cast<int>(this->activeCategory_) == i);
+
+    this->renderer_.drawRect(
+        r, selected ? graphics::Color{0.30f, 0.55f, 0.85f, 1.0f}
+                    : graphics::Color{0.15f, 0.17f, 0.23f, 1.0f});
+    this->renderer_.drawFrame(
+        r, graphics::Color{1.0f, 1.0f, 1.0f, selected ? 0.5f : 0.20f}, 2.0f);
+
+    const float textW = this->renderer_.measureText(kLabels[i], 2.0f);
+    this->renderer_.drawText(kLabels[i],
+                             {r.center().x - textW * 0.5f, r.y + 10.0f}, 2.0f,
+                             graphics::kWhite);
+  }
+}
+
 void SalonBuildState::renderItemStrip() {
+  switch (this->activeCategory_) {
+  case Category::Stations:
+    this->renderStationItems();
+    break;
+  case Category::Floors:
+    this->renderCosmeticItems(CosmeticKind::Floor);
+    break;
+  case Category::Walls:
+    this->renderCosmeticItems(CosmeticKind::Wall);
+    break;
+  case Category::Decor:
+    this->renderCosmeticItems(CosmeticKind::Decor);
+    break;
+  }
+}
+
+void SalonBuildState::renderStationItems() {
   const auto &catalog = StationCatalog::all();
 
   for (int i = 0; i < static_cast<int>(catalog.size()); ++i) {
@@ -164,46 +227,94 @@ void SalonBuildState::renderItemStrip() {
     const bool selected = (arch.id == this->selectedArchetypeId_);
     const bool affordable = this->context_->money() >= arch.cost;
 
-    const graphics::Color fill =
-        selected ? graphics::Color{0.30f, 0.55f, 0.85f, 1.0f}
-                 : graphics::Color{0.15f, 0.17f, 0.23f, 1.0f};
+    this->renderer_.drawRect(
+        rect, selected ? graphics::Color{0.30f, 0.55f, 0.85f, 1.0f}
+                       : graphics::Color{0.15f, 0.17f, 0.23f, 1.0f});
+    this->renderer_.drawFrame(rect,
+                              affordable
+                                  ? graphics::Color{1.0f, 1.0f, 1.0f, 0.35f}
+                                  : graphics::Color{0.4f, 0.4f, 0.4f, 0.35f},
+                              2.0f);
 
-    this->renderer_.drawRect(rect, fill);
-    // clang-format off
-    this->renderer_.drawFrame(
-      rect,
-      affordable
-        ? graphics::Color{1.0f, 1.0f, 1.0f, 0.35f}
-        : graphics::Color{0.4f, 0.4f, 0.4f, 0.35f},
-      2.0f
-    );
-    // clang-format on
-
-    // Swatch
     const math::Rect swatch{rect.x + 12.0f, rect.y + 12.0f, 40.0f, 40.0f};
     this->renderer_.drawRect(swatch, arch.placeholderColor);
     this->renderer_.drawFrame(swatch, graphics::Color{1, 1, 1, 0.25f}, 1.0f);
 
-    // Label
-    // clang-format off
-    this->renderer_.drawText(
-      arch.displayName,
-      {rect.x + 64.0f, rect.y + 12.0f},
-      2.6f,
-      graphics::kWhite
-    );
+    this->renderer_.drawText(arch.displayName, {rect.x + 64.0f, rect.y + 12.0f},
+                             2.6f, graphics::kWhite);
 
-    // Price
     const std::string priceStr = "$" + std::to_string(arch.cost);
-    this->renderer_.drawText(
-      priceStr, 
-      {rect.x + 64.0f, rect.y + 48.0f},
-      2.2f,
-      affordable 
-        ? graphics::Color{0.85f, 1.0f, 0.75f, 1.0f}
-        : graphics::Color{1.0f, 0.55f, 0.55f, 1.0f}
-    );
-    // clang-format on
+    this->renderer_.drawText(priceStr, {rect.x + 64.0f, rect.y + 48.0f}, 2.2f,
+                             affordable
+                                 ? graphics::Color{0.85f, 1.0f, 0.75f, 1.0f}
+                                 : graphics::Color{1.0f, 0.55f, 0.55f, 1.0f});
+  }
+}
+
+void SalonBuildState::renderCosmeticItems(CosmeticKind kind) {
+  const auto items = CosmeticCatalog::byKind(kind);
+
+  for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+    const math::Rect rect = this->itemRect(i);
+    const CosmeticArchetype *arch = items[i];
+    const bool unlocked = this->context_->isCosmeticUnlocked(arch->id);
+
+    // Determine selection: Floors/Walls show current, Decor shows selected.
+    bool selected = false;
+    if (kind == CosmeticKind::Floor) {
+      selected = (this->context_->currentFloorId() == arch->id);
+    } else if (kind == CosmeticKind::Wall) {
+      selected = (this->context_->currentWallId() == arch->id);
+    } else if (kind == CosmeticKind::Decor) {
+      selected = (this->selectedArchetypeId_ == arch->id);
+    }
+
+    const graphics::Color fill =
+        !unlocked  ? graphics::Color{0.10f, 0.10f, 0.12f, 1.0f}
+        : selected ? graphics::Color{0.30f, 0.55f, 0.85f, 1.0f}
+                   : graphics::Color{0.15f, 0.17f, 0.23f, 1.0f};
+
+    this->renderer_.drawRect(rect, fill);
+    this->renderer_.drawFrame(rect,
+                              unlocked
+                                  ? graphics::Color{1.0f, 1.0f, 1.0f, 0.35f}
+                                  : graphics::Color{0.4f, 0.4f, 0.4f, 0.35f},
+                              2.0f);
+
+    const math::Rect swatch{rect.x + 12.0f, rect.y + 12.0f, 40.0f, 40.0f};
+    const graphics::Color swatchColor =
+        unlocked ? arch->primary : graphics::Color{0.25f, 0.25f, 0.20f, 1.0f};
+    this->renderer_.drawRect(swatch, swatchColor);
+    this->renderer_.drawFrame(swatch, graphics::Color{1, 1, 1, 0.25f}, 1.0f);
+
+    const graphics::Color textColor =
+        unlocked ? graphics::kWhite : graphics::Color{0.5f, 0.5f, 0.55f, 1.0f};
+
+    this->renderer_.drawText(arch->displayName,
+                             {rect.x + 64.0f, rect.y + 12.0f}, 2.6f, textColor);
+
+    if (!unlocked) {
+      this->renderer_.drawText("Locked", {rect.x + 64.0f, rect.y + 48.0f}, 2.2f,
+                               graphics::Color{0.55f, 0.55f, 0.60f, 1.0f});
+    }
+  }
+}
+
+void SalonBuildState::renderDecor() {
+  using L = SalonLayout;
+  for (const auto &d : this->context_->layout().decors()) {
+    const math::Rect cellRect{
+        L::kOriginX + d.gridX * L::kTileSize,
+        L::kOriginY + d.gridY * L::kTileSize,
+        L::kTileSize,
+        L::kTileSize,
+    };
+    const auto *arch = CosmeticCatalog::find(d.archetypeId);
+    const graphics::Color c =
+        arch ? arch->primary : graphics::Color{0.7f, 0.7f, 0.7f, 1.0f};
+    this->renderer_.drawRect(cellRect.inset(L::kTileSize * 0.20f), c);
+    this->renderer_.drawFrame(cellRect.inset(L::kTileSize * 0.20f),
+                              graphics::Color{1.0f, 1.0f, 1.0f, 0.25f}, 2.0f);
   }
 }
 
@@ -215,21 +326,76 @@ math::Rect SalonBuildState::itemRect(int index) const {
       core::kDesignWidth - kSideButtonMargin - kSideButtonWidth - 20.0f;
   const float available = rightEdge - leftEdge;
 
-  const int count = static_cast<int>(StationCatalog::all().size());
-  const float stripWidth = count * kItemWidth + (count - 1) * kItemGap;
+  int count = 0;
+  switch (this->activeCategory_) {
+  case Category::Stations:
+    count = static_cast<int>(StationCatalog::all().size());
+    break;
+  case Category::Floors:
+    count =
+        static_cast<int>(CosmeticCatalog::byKind(CosmeticKind::Floor).size());
+    break;
+  case Category::Walls:
+    count =
+        static_cast<int>(CosmeticCatalog::byKind(CosmeticKind::Wall).size());
+    break;
+  case Category::Decor:
+    count =
+        static_cast<int>(CosmeticCatalog::byKind(CosmeticKind::Decor).size());
+    break;
+  }
+
+  const float stripWidth =
+      count * kItemWidth + std::max(0, count - 1) * kItemGap;
   const float startX = leftEdge + (available - stripWidth) * 0.5f;
 
   return {startX + index * (kItemWidth + kItemGap), kItemStripY, kItemWidth,
           kItemHeight};
 }
 
-int SalonBuildState::itemIndexAt(const math::Vec2 &p) const {
-  const int count = static_cast<int>(StationCatalog::all().size());
-  for (int i = 0; i < count; ++i) {
-    if (itemRect(i).contains(p))
+math::Rect SalonBuildState::tabRect(int index) const {
+  return {kTabStartX + index * (kTabWidth + kTabGap), kTabY, kTabWidth,
+          kTabHeight};
+}
+
+int SalonBuildState::tabIndexAt(const math::Vec2 &p) const {
+  for (int i = 0; i < kCategoryCount; ++i) {
+    if (this->tabRect(i).contains(p))
       return i;
   }
   return -1;
+}
+
+int SalonBuildState::itemIndexAt(const math::Vec2 &p) const {
+  int count = 0;
+  switch (this->activeCategory_) {
+  case Category::Stations:
+    count = static_cast<int>(StationCatalog::all().size());
+    break;
+  case Category::Floors:
+    count =
+        static_cast<int>(CosmeticCatalog::byKind(CosmeticKind::Floor).size());
+    break;
+  case Category::Walls:
+    count =
+        static_cast<int>(CosmeticCatalog::byKind(CosmeticKind::Wall).size());
+    break;
+  case Category::Decor:
+    count =
+        static_cast<int>(CosmeticCatalog::byKind(CosmeticKind::Decor).size());
+    break;
+  }
+
+  for (int i = 0; i < count; ++i) {
+    if (this->itemRect(i).contains(p))
+      return i;
+  }
+  return -1;
+}
+
+void SalonBuildState::setCategory(Category c) {
+  this->activeCategory_ = c;
+  this->selectedArchetypeId_.clear();
 }
 
 void SalonBuildState::onTouch(const input::TouchEvent &event) {
@@ -240,16 +406,68 @@ void SalonBuildState::onTouch(const input::TouchEvent &event) {
   if (event.phase != input::TouchPhase::Down)
     return;
 
+  const int tabIdx = this->tabIndexAt(event.position);
+  if (tabIdx >= 0) {
+    this->setCategory(static_cast<Category>(tabIdx));
+    return;
+  }
+
   // Item strip - select an archetype
   const int itemIdx = this->itemIndexAt(event.position);
   if (itemIdx >= 0) {
-    const auto &arch = StationCatalog::all()[itemIdx];
-    if (this->selectedArchetypeId_ == arch.id) {
-      this->selectedArchetypeId_.clear(); // tap again to deselect
-    } else {
-      this->selectedArchetypeId_ = arch.id;
+    switch (this->activeCategory_) {
+    case Category::Stations: {
+      const auto &arch = StationCatalog::all()[itemIdx];
+      this->selectedArchetypeId_ =
+          (this->selectedArchetypeId_ == arch.id) ? "" : arch.id;
+      break;
     }
-    return;
+    case Category::Floors: {
+      const auto items = CosmeticCatalog::byKind(CosmeticKind::Floor);
+      const auto *arch = items[itemIdx];
+      if (!this->context_->isCosmeticUnlocked(arch->id)) {
+        this->toast_.setKind(ui::ToastKind::Warning)
+            .setTitle("Locked")
+            .show("Keep playing to unlock");
+        return;
+      }
+      this->context_->setCurrentFloor(arch->id);
+      this->engine_->saveProfile();
+      this->toast_.setKind(ui::ToastKind::Success)
+          .setTitle("Floor changed")
+          .show(arch->displayName);
+      break;
+    }
+    case Category::Walls: {
+      const auto items = CosmeticCatalog::byKind(CosmeticKind::Wall);
+      const auto *arch = items[itemIdx];
+      if (!this->context_->isCosmeticUnlocked(arch->id)) {
+        this->toast_.setKind(ui::ToastKind::Warning)
+            .setTitle("Locked")
+            .show("Keep playing to unlock");
+        return;
+      }
+      this->context_->setCurrentWall(arch->id);
+      this->engine_->saveProfile();
+      this->toast_.setKind(ui::ToastKind::Success)
+          .setTitle("Wall changed")
+          .show(arch->displayName);
+      break;
+    }
+    case Category::Decor: {
+      const auto items = CosmeticCatalog::byKind(CosmeticKind::Decor);
+      const auto *arch = items[itemIdx];
+      if (!this->context_->isCosmeticUnlocked(arch->id)) {
+        this->toast_.setKind(ui::ToastKind::Warning)
+            .setTitle("Locked")
+            .show("Keep playing to unlock");
+        return;
+      }
+      this->selectedArchetypeId_ =
+          (this->selectedArchetypeId_ == arch->id) ? "" : arch->id;
+      break;
+    }
+    }
   }
 
   // Grid cell
@@ -264,15 +482,45 @@ void SalonBuildState::onCellTapped(int col, int row) {
   SalonLayout &layout = this->context_->layout();
 
   // Nothing selected - tap a station to sell it.
+  if (this->activeCategory_ == Category::Decor) {
+    if (this->selectedArchetypeId_.empty()) {
+      const auto removed = layout.removeDecorAt(col, row);
+      if (removed) {
+        this->engine_->saveProfile();
+        this->toast_.setKind(ui::ToastKind::Success)
+            .setTitle("Removed")
+            .show("");
+      }
+      return;
+    }
+    DecorInstance d;
+    d.archetypeId = this->selectedArchetypeId_;
+    d.gridX = col;
+    d.gridY = row;
+    if (layout.placeDecor(d)) {
+      this->selectedArchetypeId_.clear();
+      this->engine_->saveProfile();
+    } else {
+      this->toast_.setKind(ui::ToastKind::Warning)
+          .setTitle("Can't place here")
+          .show("");
+    }
+    return;
+  }
+
+  // Floors/Walls not use grid taps.
+  if (this->activeCategory_ == Category::Floors ||
+      this->activeCategory_ == Category::Walls) {
+    return;
+  }
+
+  // Stations
   if (this->selectedArchetypeId_.empty()) {
     const auto result = BuildSystem::remove(*this->context_, col, row);
     if (result == BuildSystem::Result::NothingToRemove)
       return;
-
-    if (result == BuildSystem::Result::Success) {
+    if (result == BuildSystem::Result::Success)
       this->engine_->saveProfile();
-    }
-
     this->toast_
         .setKind(result == BuildSystem::Result::Success
                      ? ui::ToastKind::Success
@@ -283,10 +531,8 @@ void SalonBuildState::onCellTapped(int col, int row) {
     return;
   }
 
-  // Something selected - try to place it
   const auto result =
       BuildSystem::place(*this->context_, this->selectedArchetypeId_, col, row);
-
   if (result == BuildSystem::Result::Success) {
     this->selectedArchetypeId_.clear();
     this->engine_->saveProfile();

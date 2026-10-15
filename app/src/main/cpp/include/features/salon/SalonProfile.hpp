@@ -20,6 +20,11 @@ struct SalonProfile {
   uint32_t bestDayCustomers = 0;
 
   std::vector<StationInstance> stations;
+  std::vector<DecorInstance> decors;
+
+  std::string floorId = "floor_wood";
+  std::string wallId = "wall_cream";
+  std::vector<std::string> unlockedCosmeticIds;
 };
 
 } // namespace salshalon::features::salon

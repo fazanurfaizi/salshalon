@@ -1,6 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <vector>
+
 namespace salshalon::features::salon {
 
 struct SessionResult {
@@ -13,6 +16,7 @@ struct SessionResult {
   uint32_t customersLost = 0;
   float elapsedSecods = 0.0f;
   uint32_t difficultyScore = 0.0f;
+  std::vector<std::string> newlyUnlocked;
 
   int32_t moneyEarned() const { return moneyAfter - moneyBefore; }
 

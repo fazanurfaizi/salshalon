@@ -13,14 +13,13 @@ using core::kDesignWidth;
 
 namespace {
 constexpr float kPanelWidth = 700.0f;
-constexpr float kPanelHeight = 420.0f;
+constexpr float kPanelHeight = 520.0f; // was 420
 constexpr float kRowHeight = 56.0f;
 constexpr float kFirstRowY = 100.0f;
 constexpr float kLabelScale = 3.4f;
 constexpr float kValueScale = 3.4f;
-constexpr float kTitleScale = 5.5;
-
-constexpr float kButtonWidth = 400.0f;
+constexpr float kTitleScale = 5.5f;
+constexpr float kButtonWidth = 560.0f; // wider for "CONTINUE TO BUILD"
 constexpr float kButtonHeight = 96.0f;
 } // namespace
 
@@ -104,6 +103,23 @@ void SessionSummaryState::render(graphics::SpriteBatch &batch) {
   drawRow("Reputation", repValue,
           repDelta >= 0 ? graphics::Color{0.85f, 1.0f, 0.75f, 1.0f}
                         : graphics::Color{1.0f, 0.55f, 0.55f, 1.0f});
+
+  // Unlock section
+  const float unlockHeaderY = panel.y + 340.0f;
+  this->renderer_.drawText("NEW UNLOCKS", {leftX, unlockHeaderY}, 2.6f,
+                           graphics::Color{0.85f, 0.90f, 1.0f, 0.8f});
+
+  float unlockY = unlockHeaderY + 42.0f;
+  if (this->result_.newlyUnlocked.empty()) {
+    this->renderer_.drawText("-", {leftX, unlockY}, 2.6f,
+                             graphics::Color{0.5f, 0.5f, 0.55f, 1.0f});
+  } else {
+    for (const auto &name : this->result_.newlyUnlocked) {
+      this->renderer_.drawText("• " + name, {leftX, unlockY}, 2.6f,
+                               graphics::Color{0.85f, 1.0f, 0.75f, 1.0f});
+      unlockY += 34.0f;
+    }
+  }
 
   // Continue button
   this->continueButton_->render(this->renderer_);

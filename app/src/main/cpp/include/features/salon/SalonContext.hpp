@@ -36,6 +36,16 @@ public:
   SalonLayout &layout() { return this->layout_; }
   const SalonLayout &layout() const { return this->layout_; }
 
+  // Cosmetics
+  const std::string &currentFloorId() const { return this->floorId_; }
+  const std::string &currentWallId() const { return this->wallId_; }
+
+  bool isCosmeticUnlocked(const std::string &id) const;
+  bool unlockCosmetic(const std::string &id);
+
+  void setCurrentFloor(const std::string &id);
+  void setCurrentWall(const std::string &id);
+
   SalonProfile toProfile() const;
 
   void applyProfile(const SalonProfile &profile);
@@ -50,6 +60,10 @@ private:
   int32_t day_ = 1;
   uint32_t totalCustomersServed_ = 0;
   uint32_t bestDayCustomers_ = 0;
+
+  std::string floorId_ = "floor_wood";
+  std::string wallId_ = "wall_cream";
+  std::vector<std::string> unlockedCosmeticIds_;
 
   SalonLayout layout_{};
 };
