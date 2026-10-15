@@ -1,5 +1,6 @@
 #include "features/salon/SessionSummaryState.hpp"
 
+#include "audio/Sfx.hpp"
 #include "core/GameConfig.hpp"
 #include "core/Log.hpp"
 #include "features/Feature.hpp"
@@ -29,6 +30,7 @@ SessionSummaryState::SessionSummaryState(SessionResult result)
 void SessionSummaryState::onEnter(core::Engine &engine) {
   game::GameState::onEnter(engine);
   this->buildUi();
+  engine.audio().play(audio::Sfx::Summary);
   SAL_LOGI("Summary: day %d — served %u, lost %u, money %d, rep %d",
            result_.day, result_.customersServed, result_.customersLost,
            result_.moneyEarned(), result_.reputationDelta());
@@ -137,6 +139,8 @@ void SessionSummaryState::buildUi() {
 
 void SessionSummaryState::onContinuePressed() {
   SAL_LOGI("Summary: continue");
+  if (this->engine_ != nullptr)
+    this->engine_->audio().play(audio::Sfx::Tap);
   goTo<SalonBuildState>(*this->engine_);
 }
 

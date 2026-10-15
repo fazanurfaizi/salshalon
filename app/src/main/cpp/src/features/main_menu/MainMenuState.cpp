@@ -3,6 +3,7 @@
 #include <cmath>
 #include <utility>
 
+#include "audio/Sfx.hpp"
 #include "core/Engine.hpp"
 #include "core/GameConfig.hpp"
 #include "core/Log.hpp"
@@ -119,11 +120,15 @@ void MainMenuState::onTouch(const input::TouchEvent &event) {
 
 void MainMenuState::onPlayPressed() {
   SAL_LOGI("MainMenuState: PLAY pressed");
+  if (this->engine_ != nullptr)
+    this->engine_->audio().play(audio::Sfx::Tap);
   goTo<salon::SalonPlayState>(*this->engine_);
 }
 
 void MainMenuState::onSettingsPressed() {
   SAL_LOGI("MainMenuState: SETTINGS pressed");
+  if (this->engine_ != nullptr)
+    this->engine_->audio().play(audio::Sfx::Tap);
   // this->settingsOpen_ = true;
   goTo<settings::SettingsState>(*this->engine_);
 }
@@ -131,6 +136,7 @@ void MainMenuState::onSettingsPressed() {
 void MainMenuState::onQuitPressed() {
   SAL_LOGI("MainMenuState: QUIT pressed");
   if (this->engine_ != nullptr) {
+    this->engine_->audio().play(audio::Sfx::Tap);
     this->engine_->requestQuit();
   }
 }

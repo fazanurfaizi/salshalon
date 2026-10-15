@@ -34,10 +34,14 @@ add_library(salshalon SHARED
     # Entry point
     main.cpp
 
+    src/audio/Sfx.cpp
+
     src/core/AssetManager.cpp
     src/core/Clock.cpp
     src/core/Engine.cpp
     src/core/GLContext.cpp
+
+    src/fx/Particles.cpp
 
     src/game/StateManager.cpp
 
@@ -109,6 +113,7 @@ target_link_libraries(salshalon
         EGL
         GLESv3
         jnigraphics
+        aaudio
         android
         log
 )

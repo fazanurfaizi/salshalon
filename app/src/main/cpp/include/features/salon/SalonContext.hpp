@@ -50,6 +50,9 @@ public:
 
   void applyProfile(const SalonProfile &profile);
 
+  bool tutorialSeen() const { return this->tutorialSeen_; }
+  void markTutorialSeen() { this->tutorialSeen_ = true; }
+
 private:
   static constexpr int32_t kDailyReputationDecay = 1;
   static constexpr int32_t kReputationMin = 0;
@@ -64,6 +67,8 @@ private:
   std::string floorId_ = "floor_wood";
   std::string wallId_ = "wall_cream";
   std::vector<std::string> unlockedCosmeticIds_;
+
+  bool tutorialSeen_ = false;
 
   SalonLayout layout_{};
 };

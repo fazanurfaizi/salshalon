@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 
+#include "audio/Sfx.hpp"
 #include "core/AssetManager.hpp"
 #include "core/Clock.hpp"
 #include "core/GLContext.hpp"
@@ -56,6 +57,16 @@ public:
   /// Shared, persistent salon state.
   features::salon::SalonContext &salon() { return *salon_; }
 
+  /// Procedural sound effects + ambient music.
+  audio::AudioEngine &audio() { return audio_; }
+
+  /// Fullscreen game-feel feedback, driven per-frame in frame().
+  /// Shake offsets the projection (decaying); flash draws a fading
+  /// fullscreen tint after the state renders. Both are fire-and-forget.
+  void addShake(float durationSeconds = 0.35f, float magnitudePx = 10.0f);
+  void addFlash(const graphics::Color &color, float durationSeconds = 0.4f);
+
+  void onPaused();
   bool saveProfile();
 
 private:
@@ -73,6 +84,16 @@ private:
   std::string saveFilePath_{};
 
   std::vector<input::TouchEvent> pendingTouches_{};
+
+  audio::AudioEngine audio_{};
+
+  float fxTime_ = 0.0f;
+  float shakeTime_ = 0.0f;
+  float shakeDuration_ = 0.0f;
+  float shakeMagnitude_ = 0.0f;
+  graphics::Color flashColor_{1.0f, 1.0f, 1.0f, 0.0f};
+  float flashTime_ = 0.0f;
+  float flashDuration_ = 0.0f;
 
   bool initialized_ = false;
   bool running_ = false;

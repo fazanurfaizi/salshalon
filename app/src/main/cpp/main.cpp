@@ -46,11 +46,17 @@ void handle_cmd(android_app *app, int32_t cmd) {
       engine->onWindowCreated(app->window);
     break;
   case APP_CMD_TERM_WINDOW:
+    engine->onPaused();
     engine->onWindowDestroyed();
     break;
   case APP_CMD_WINDOW_RESIZED:
   case APP_CMD_CONFIG_CHANGED:
     engine->onWindowResized();
+    break;
+  case APP_CMD_PAUSE:
+  case APP_CMD_STOP:
+  case APP_CMD_SAVE_STATE:
+    engine->onPaused();
     break;
   case APP_CMD_LOW_MEMORY:
     SAL_LOGW("System reported low memory");

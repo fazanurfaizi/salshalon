@@ -67,6 +67,8 @@ void serializeProfile(std::ostream &os, const SalonProfile &p) {
     write_binary(os, static_cast<int32_t>(d.gridX));
     write_binary(os, static_cast<int32_t>(d.gridY));
   }
+
+  write_binary(os, p.hasSeenTutorial);
 }
 
 std::optional<SalonProfile> deserializeProfile(std::istream &ifs) {
@@ -79,6 +81,7 @@ std::optional<SalonProfile> deserializeProfile(std::istream &ifs) {
              p.version, SalonProfile::kCurrentVersion);
     return std::nullopt;
   }
+  const uint32_t fileVersion = p.version;
 
   if (!read_binary(ifs, p.money) || !read_binary(ifs, p.reputation) ||
       !read_binary(ifs, p.day) || !read_binary(ifs, p.totalCustomersServed) ||
@@ -144,6 +147,13 @@ std::optional<SalonProfile> deserializeProfile(std::istream &ifs) {
     if (d.archetypeId.empty() || d.gridX < 0 || d.gridY < 0)
       continue;
     p.decors.push_back(std::move(d));
+  }
+
+  if (fileVersion >= 2) {
+    bool seen = false;
+    if (!read_binary(ifs, seen))
+      return std::nullopt;
+    p.hasSeenTutorial = seen;
   }
 
   if (!ifs)

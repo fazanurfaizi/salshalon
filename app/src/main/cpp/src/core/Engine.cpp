@@ -1,6 +1,8 @@
 #include "core/Engine.hpp"
 
 #include <GLES2/gl2.h>
+#include <algorithm>
+#include <cmath>
 #include <game-activity/GameActivity.h>
 #include <memory>
 
@@ -43,6 +45,7 @@ void Engine::shutdown() {
   this->states_.change(nullptr);
   this->states_.applyPending();
 
+  this->audio_.shutdown();
   this->batch_.shutdown();
   this->gl_.destroy();
 
@@ -101,6 +104,13 @@ void Engine::frame() {
 
   const float deltaSeconds = this->clock.tick();
 
+  this->fxTime_ += deltaSeconds;
+  if (this->shakeTime_ > 0.0f)
+    this->shakeTime_ = std::max(0.0f, this->shakeTime_ - deltaSeconds);
+  if (this->flashTime_ > 0.0f)
+    this->flashTime_ = std::max(0.0f, this->flashTime_ - deltaSeconds);
+  this->audio_.update();
+
   // Surface
   this->gl_.querySize();
   this->camera_.setSurfaceSize(this->gl_.width(), this->gl_.height());
@@ -133,9 +143,25 @@ void Engine::frame() {
 
   this->camera_.applyViewport();
 
-  this->batch_.begin(this->camera_.projection());
+  math::Mat4 projection = this->camera_.projection();
+  if (this->shakeTime_ > 0.0f && this->shakeDuration_ > 0.0f) {
+    const float t = this->shakeTime_ / this->shakeDuration_;
+    const float mag = this->shakeMagnitude_ * t;
+    const float ox = std::sin(this->fxTime_ * 70.0f) * mag;
+    const float oy = std::cos(this->fxTime_ * 53.0f) * mag;
+    projection = glm::translate(projection, math::Vec3(ox, oy, 0.0f));
+  }
+
+  this->batch_.begin(projection);
   if (state != nullptr)
     state->render(this->batch_);
+
+  if (this->flashTime_ > 0.0f && this->flashDuration_ > 0.0f) {
+    const float t = this->flashTime_ / this->flashDuration_;
+    const graphics::Color c{this->flashColor_.r, this->flashColor_.g,
+                            this->flashColor_.b, this->flashColor_.a * t};
+    this->batch_.drawRect(this->camera_.worldBounds(), c);
+  }
   this->batch_.end();
 
   this->gl_.swapBuffers();
@@ -158,6 +184,29 @@ bool Engine::saveProfile() {
   }
   return features::salon::SaveSystem::save(this->saveFilePath_,
                                            this->salon_->toProfile());
+}
+
+void Engine::addShake(float durationSeconds, float magnitudePx) {
+  if (durationSeconds <= 0.0f || magnitudePx <= 0.0f)
+    return;
+  this->shakeTime_ = durationSeconds;
+  this->shakeDuration_ = durationSeconds;
+  this->shakeMagnitude_ = magnitudePx;
+}
+
+void Engine::addFlash(const graphics::Color &color, float durationSeconds) {
+  if (durationSeconds <= 0.0f)
+    return;
+  this->flashColor_ = color;
+  this->flashTime_ = durationSeconds;
+  this->flashDuration_ = durationSeconds;
+}
+
+void Engine::onPaused() {
+  if (this->salon_ && !this->saveFilePath_.empty()) {
+    if (this->saveProfile())
+      SAL_LOGI("Engine: progress saved on pause");
+  }
 }
 
 } // namespace salshalon::core

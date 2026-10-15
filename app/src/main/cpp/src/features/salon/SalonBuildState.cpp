@@ -1,5 +1,6 @@
 #include "features/salon/SalonBuildState.hpp"
 
+#include "audio/Sfx.hpp"
 #include "core/Engine.hpp"
 #include "core/GameConfig.hpp"
 #include "core/Log.hpp"
@@ -545,11 +546,15 @@ void SalonBuildState::onCellTapped(int col, int row) {
 
 void SalonBuildState::onOpenSalonPressed() {
   SAL_LOGI("Build: OPEN SALON");
+  if (this->engine_ != nullptr)
+    this->engine_->audio().play(audio::Sfx::Tap);
   goTo<SalonPlayState>(*this->engine_);
 }
 
 void SalonBuildState::onMenuPressed() {
   SAL_LOGI("Build: MENU");
+  if (this->engine_ != nullptr)
+    this->engine_->audio().play(audio::Sfx::Tap);
   goTo<main_menu::MainMenuState>(*this->engine_);
 }
 

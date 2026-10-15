@@ -8,7 +8,7 @@
 namespace salshalon::features::salon {
 
 struct SalonProfile {
-  static constexpr uint32_t kCurrentVersion = 1;
+  static constexpr uint32_t kCurrentVersion = 2;
 
   uint32_t version = kCurrentVersion;
 
@@ -25,6 +25,8 @@ struct SalonProfile {
   std::string floorId = "floor_wood";
   std::string wallId = "wall_cream";
   std::vector<std::string> unlockedCosmeticIds;
+
+  bool hasSeenTutorial = false;
 };
 
 } // namespace salshalon::features::salon

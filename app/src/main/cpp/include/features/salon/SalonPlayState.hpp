@@ -1,10 +1,10 @@
 #pragma once
 
-#include "features/salon/CosmeticCatalog.hpp"
 #include "features/salon/Customer.hpp"
 #include "features/salon/SalonAssets.hpp"
 #include "features/salon/SalonContext.hpp"
 #include "features/salon/SalonGrid.hpp"
+#include "fx/Particles.hpp"
 #include "game/GameState.hpp"
 #include "ui/Button.hpp"
 #include "ui/Renderer.hpp"
@@ -65,6 +65,15 @@ private:
 
   std::unique_ptr<ui::Button> closeButton_{};
   std::unique_ptr<ui::Toast> toast_{};
+
+  fx::Particles particles_{};
+
+  // First-session tutorial
+  bool tutorialActive_ = false;
+  int tutorialStage_ = 0;
+  float tutorialTimer_ = 0.0f;
+  void updateTutorial(float deltaSeconds);
+  void markTutorialSeen();
 
   // Customer lifecycle
   void spawnTick(float deltaSeconds);

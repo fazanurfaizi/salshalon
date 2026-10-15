@@ -113,6 +113,7 @@ SalonProfile SalonContext::toProfile() const {
   p.floorId = floorId_;
   p.wallId = wallId_;
   p.unlockedCosmeticIds = unlockedCosmeticIds_;
+  p.hasSeenTutorial = tutorialSeen_;
   return p;
 }
 
@@ -126,6 +127,7 @@ void SalonContext::applyProfile(const SalonProfile &profile) {
   floorId_ = profile.floorId.empty() ? "floor_wood" : profile.floorId;
   wallId_ = profile.wallId.empty() ? "wall_cream" : profile.wallId;
   unlockedCosmeticIds_ = profile.unlockedCosmeticIds;
+  tutorialSeen_ = profile.hasSeenTutorial;
 
   layout_.reset();
   while (!layout_.stations().empty()) {
@@ -140,9 +142,10 @@ void SalonContext::applyProfile(const SalonProfile &profile) {
   }
 
   SAL_LOGI("SalonContext: profile applied — $%d, rep %d, day %d, "
-           "%zu stations, %zu decors, floor=%s wall=%s",
+           "%zu stations, %zu decors, floor=%s wall=%s tutorialSeen=%d",
            money_, reputation_, day_, layout_.stations().size(),
-           layout_.decors().size(), floorId_.c_str(), wallId_.c_str());
+           layout_.decors().size(), floorId_.c_str(), wallId_.c_str(),
+           tutorialSeen_ ? 1 : 0);
 }
 
 } // namespace salshalon::features::salon

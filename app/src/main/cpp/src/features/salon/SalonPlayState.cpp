@@ -1,14 +1,17 @@
 #include "features/salon/SalonPlayState.hpp"
 
+#include <cmath>
 #include <glm/geometric.hpp>
 #include <memory>
 #include <random>
 #include <string>
 
+#include "audio/Sfx.hpp"
 #include "core/Engine.hpp"
 #include "core/GameConfig.hpp"
 #include "core/Log.hpp"
 #include "features/Feature.hpp"
+#include "features/salon/CosmeticCatalog.hpp"
 #include "features/salon/CosmeticUnlocks.hpp"
 #include "features/salon/Customer.hpp"
 #include "features/salon/CustomerCatalog.hpp"
@@ -52,14 +55,26 @@ void SalonPlayState::onEnter(core::Engine &engine) {
   this->toast_ = std::make_unique<ui::Toast>();
   this->toast_->setKind(ui::ToastKind::Info).setFadeTime(1.5f);
 
+  this->particles_.clear();
+
+  this->engine_->audio().setAmbient(true);
+
+  this->tutorialActive_ =
+      !this->context_->tutorialSeen() && this->context_->day() == 1;
+  this->tutorialStage_ = 0;
+  this->tutorialTimer_ = 0.0f;
+
   SAL_LOGI("Salon: enter (day %d, money $%d, rep %d)", this->context_->day(),
            this->context_->money(), this->context_->reputation());
 }
 
 void SalonPlayState::onExit() {
+  if (this->engine_ != nullptr)
+    this->engine_->audio().setAmbient(false);
   this->context_->layout().resetOccupantId();
   this->assets_.unload();
   this->customers_.clear();
+  this->particles_.clear();
   this->closeButton_.reset();
   this->toast_.reset();
   this->context_ = nullptr;
@@ -70,9 +85,11 @@ void SalonPlayState::update(float deltaSeconds) {
   this->elapsed_ += deltaSeconds;
 
   this->spawnTick(deltaSeconds);
+  this->updateTutorial(deltaSeconds);
 
   this->closeButton_->update(deltaSeconds);
   this->toast_->update(deltaSeconds);
+  this->particles_.update(deltaSeconds);
 
   for (auto &customer : this->customers_) {
     customer.update(deltaSeconds);
@@ -112,6 +129,8 @@ void SalonPlayState::render(graphics::SpriteBatch &batch) {
 #ifndef NDEBUG
   this->renderDebugOverlay();
 #endif // !NDEBUG
+
+  this->particles_.render(batch);
 
   this->closeButton_->render(this->renderer_);
 
@@ -237,15 +256,22 @@ void SalonPlayState::renderCustomer() {
       bodyColor.a *= 0.55f;
     }
 
-    const math::Rect rect = math::Rect::fromCenter(
-        customer.currentPosition(), kCustomerSize, kCustomerSize);
+    // Idle animation
+    math::Vec2 center = customer.currentPosition();
+    if (customer.currentState() == CustomerState::Queueing ||
+        customer.currentState() == CustomerState::Seated) {
+      const float phase = static_cast<float>(customer.id() % 7u) * 0.9f;
+      center.y += std::sin(this->elapsed_ * 2.2f + phase) * 3.0f;
+    }
+
+    const math::Rect rect =
+        math::Rect::fromCenter(center, kCustomerSize, kCustomerSize);
     this->renderer_.drawRect(rect, bodyColor);
 
     // Small head so orientation is readable
-    const math::Rect head = math::Rect::fromCenter(
-        {customer.currentPosition().x,
-         customer.currentPosition().y - kCustomerSize * 0.35f},
-        kCustomerSize * 0.55f, kCustomerSize * 0.55f);
+    const math::Rect head =
+        math::Rect::fromCenter({center.x, center.y - kCustomerSize * 0.35f},
+                               kCustomerSize * 0.55f, kCustomerSize * 0.55f);
     this->renderer_.drawRect(head, graphics::Color{1.0f, 0.82f, 0.66f, 1.0f});
 
     if (customer.currentState() == CustomerState::Queueing) {
@@ -433,6 +459,12 @@ void SalonPlayState::applyCustomerTransition(Customer &customer) {
           L::cellCenter(L::kDoorCell.col, L::kDoorCell.row));
       customer.setOutcome(CustomerOutcome::Served);
       customer.setCurrentState(CustomerState::Leaving);
+      // Service complete: hearts for the happy customer + a small dust
+      // puff where the station was used.
+      this->particles_.spawn(customer.currentPosition(),
+                             fx::ParticleKind::Heart, 8);
+      this->particles_.spawn(customer.currentPosition(), fx::ParticleKind::Dust,
+                             6);
     }
     break;
 
@@ -490,6 +522,9 @@ void SalonPlayState::spawnCustomer() {
   this->reserveCell(waitSlotIndex, customer.id());
   this->customers_.push_back(customer);
 
+  if (this->engine_ != nullptr)
+    this->engine_->audio().play(audio::Sfx::Doorbell);
+
   SAL_LOGI("Salon: spawning customer %u", this->nextCustomerId_);
 }
 
@@ -510,6 +545,17 @@ bool SalonPlayState::seatCustomer(Customer &customer) {
   customer.setTargetPosition(SalonLayout::cellCenterByIndex(stationIndex));
   customer.setCurrentState(CustomerState::WalkingToSeat);
 
+  this->particles_.spawn(SalonLayout::cellCenterByIndex(stationIndex),
+                         fx::ParticleKind::Dust, 10);
+  if (this->engine_ != nullptr)
+    this->engine_->audio().play(audio::Sfx::Tap);
+  if (this->tutorialActive_ && this->tutorialStage_ == 1) {
+    this->toast_->setKind(ui::ToastKind::Info)
+        .setTitle("Seated!")
+        .show("Service takes a moment — watch for coins");
+    this->tutorialStage_ = 2;
+  }
+
   SAL_LOGI("Salon: customer %u -> station %d", customer.id(), stationIndex);
   return true;
 }
@@ -525,11 +571,30 @@ void SalonPlayState::removeGoneCustomers() {
             DifficultyCurve::kBasePayout * it->tipMultiplier());
         this->context_->onCustomerServed(payout);
         ++this->sessionServed_;
+        this->particles_.spawn(it->currentPosition(), fx::ParticleKind::Coin,
+                               14);
+        if (this->engine_ != nullptr) {
+          this->engine_->addFlash(graphics::Color{1.0f, 0.9f, 0.45f, 0.35f},
+                                  0.4f);
+          this->engine_->audio().play(audio::Sfx::Served);
+        }
+        if (this->tutorialActive_ && this->tutorialStage_ == 2) {
+          this->toast_->setKind(ui::ToastKind::Success)
+              .setTitle("Payment collected!")
+              .show("Coins earn money, happy customers earn reputation");
+          this->tutorialStage_ = 3;
+          this->markTutorialSeen();
+        }
         break;
       }
       case CustomerOutcome::GaveUp:
         ++this->sessionLost_;
         this->context_->onCustomerLost();
+        if (this->engine_ != nullptr) {
+          this->engine_->addShake(0.35f, 10.0f);
+          this->engine_->addFlash(graphics::Color{0.9f, 0.2f, 0.2f, 0.25f},
+                                  0.35f);
+        }
         break;
       }
       it = this->customers_.erase(it);
@@ -585,7 +650,35 @@ void SalonPlayState::freeCustomerCell(Customer &customer) {
   customer.setReserveCellIndex(-1);
 }
 
+void SalonPlayState::updateTutorial(float deltaSeconds) {
+  if (!this->tutorialActive_)
+    return;
+  this->tutorialTimer_ += deltaSeconds;
+  if (this->tutorialStage_ == 0 && this->tutorialTimer_ > 0.8f) {
+    this->toast_->setKind(ui::ToastKind::Info)
+        .setTitle("Welcome!")
+        .show("Tap a waiting customer to seat them");
+    this->tutorialStage_ = 1;
+  }
+}
+
+void SalonPlayState::markTutorialSeen() {
+  if (!this->tutorialActive_)
+    return;
+  this->tutorialActive_ = false;
+  this->tutorialStage_ = 3;
+  if (this->context_ != nullptr) {
+    this->context_->markTutorialSeen();
+    if (this->engine_ != nullptr)
+      this->engine_->saveProfile();
+  }
+}
+
 void SalonPlayState::onClosePressed() {
+  if (this->engine_ != nullptr)
+    this->engine_->audio().play(audio::Sfx::Tap);
+  this->markTutorialSeen();
+
   SessionResult result{
       .day = this->context_->day(),
       .moneyBefore = this->sessionMoneyBefore_,
